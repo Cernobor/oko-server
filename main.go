@@ -16,6 +16,8 @@ func main() {
 	tilepackFileArg := flag.String("tilepack", "", "File that will be sent to clients when they request a tile pack. Required.")
 	apkFileArg := flag.String("apk", "", "APK file with the client app. If not specified, no APK will be available (404).")
 
+	flag.Parse()
+
 	s := server.New(*dbFileArg, *tilepackFileArg, *apkFileArg)
 
 	sigs := make(chan os.Signal, 1)
