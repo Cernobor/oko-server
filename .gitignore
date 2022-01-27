@@ -37,3 +37,4 @@ go.work
 # Project-specific
 oko-server
 *.sqlite*
+.vscode
