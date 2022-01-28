@@ -105,7 +105,7 @@ func (s *Server) handlePOSTHandshake(gc *gin.Context) {
 	var hs models.HandshakeChallenge
 	err := gc.ShouldBindJSON(&hs)
 	if err != nil {
-		gc.String(http.StatusBadRequest, "malformed handshake challenge")
+		gc.String(http.StatusBadRequest, fmt.Sprintf("malformed handshake challenge: %v", err))
 		return
 	}
 
@@ -140,7 +140,19 @@ func (s *Server) handleGETData(gc *gin.Context) {
 }
 
 func (s *Server) handlePOSTData(gc *gin.Context) {
-	panic("not implemented")
+	var data models.Update
+	err := gc.ShouldBindJSON(&data)
+	if err != nil {
+		gc.String(http.StatusBadRequest, fmt.Sprintf("malformed data: %v", err))
+		return
+	}
+
+	err = s.update(data)
+	if err != nil {
+		internalError(gc, fmt.Errorf("failed to update data: %w", err))
+		return
+	}
+	gc.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleGETDataPeople(gc *gin.Context) {

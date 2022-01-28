@@ -5,6 +5,7 @@ import geojson "github.com/paulmach/go.geojson"
 // core objects
 
 type UserID int
+type FeatureID int
 
 type User struct {
 	ID   UserID `json:"id"`
@@ -12,7 +13,7 @@ type User struct {
 }
 
 type Feature struct {
-	ID          int              `json:"id"`
+	ID          FeatureID        `json:"id"`
 	OwnerID     *UserID          `json:"owner_id"`
 	Name        string           `json:"name"`
 	Description *string          `json:"description"`
@@ -23,9 +24,9 @@ type Feature struct {
 // transport objects
 
 type Update struct {
-	Create []Feature `json:"create"`
-	Update []Feature `json:"update"`
-	Delete []UserID  `json:"delete"`
+	Create []Feature   `json:"create"`
+	Update []Feature   `json:"update"`
+	Delete []FeatureID `json:"delete"`
 }
 
 type HandshakeChallenge struct {
