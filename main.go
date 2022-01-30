@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,12 @@ func main() {
 	apkFileArg := flag.String("apk", "", "APK file with the client app. If not specified, no APK will be available (404).")
 
 	flag.Parse()
+
+	if *tilepackFileArg == "" {
+		fmt.Fprintln(os.Stderr, "Tile pack not specified.")
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	s := server.New(*dbFileArg, *tilepackFileArg, *apkFileArg)
 

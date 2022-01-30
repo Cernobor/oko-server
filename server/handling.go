@@ -1,13 +1,17 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
+	"cernobor.cz/oko-server/errs"
 	"cernobor.cz/oko-server/models"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -90,6 +94,7 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.POST(URIData, s.handlePOSTData)
 	router.GET(URIDataPeople, s.handleGETDataPeople)
 	router.GET(URIDataFeatures, s.handleGETDataFeatures)
+	router.GET(URIDataFeaturesPhoto, s.handleGETDataFeaturesPhoto)
 
 	// tileserver
 	router.GET(URITileserver, gin.WrapH(s.tileserverSvSet.Handler()))
@@ -111,11 +116,11 @@ func (s *Server) handlePOSTHandshake(gc *gin.Context) {
 
 	id, err := s.handshake(hs)
 	if err != nil {
-		if errors.Is(err, ErrUserAlreadyExists) {
+		if errors.Is(err, errs.ErrUserAlreadyExists) {
 			gc.Status(http.StatusConflict)
-		} else if errors.Is(err, ErrUserNotExists) {
+		} else if errors.Is(err, errs.ErrUserNotExists) {
 			gc.Status(http.StatusNotFound)
-		} else if errors.Is(err, ErrAttemptedSystemUser) {
+		} else if errors.Is(err, errs.ErrAttemptedSystemUser) {
 			gc.Status(http.StatusForbidden)
 		} else {
 			internalError(gc, err)
@@ -140,6 +145,17 @@ func (s *Server) handleGETData(gc *gin.Context) {
 }
 
 func (s *Server) handlePOSTData(gc *gin.Context) {
+	switch gc.ContentType() {
+	case "application/json":
+		s.handlePOSTDataJSON(gc)
+	case "multipart/form-data":
+		s.handlePOSTDataMultipart(gc)
+	default:
+		gc.String(http.StatusBadRequest, "unsupported Content-Type")
+	}
+}
+
+func (s *Server) handlePOSTDataJSON(gc *gin.Context) {
 	var data models.Update
 	err := gc.ShouldBindJSON(&data)
 	if err != nil {
@@ -147,11 +163,99 @@ func (s *Server) handlePOSTData(gc *gin.Context) {
 		return
 	}
 
-	err = s.update(data)
+	if !isUniqueFeatureID(data.Create) {
+		gc.String(http.StatusBadRequest, "created features do not have unique IDs")
+		return
+	}
+
+	if data.CreatedPhotos != nil || data.AddPhotos != nil {
+		gc.String(http.StatusBadRequest, "created_photos and/or add_photos present, but Content-Type is application/json")
+		return
+	}
+
+	err = s.update(data, nil)
 	if err != nil {
 		internalError(gc, fmt.Errorf("failed to update data: %w", err))
 		return
 	}
+	gc.Status(http.StatusNoContent)
+}
+
+func (s *Server) handlePOSTDataMultipart(gc *gin.Context) {
+	form, err := gc.MultipartForm()
+	if err != nil {
+		gc.String(http.StatusBadRequest, "malformed multipart/form-data content")
+		return
+	}
+
+	dataStr, ok := form.Value["data"]
+	if !ok {
+		dataFile, ok := form.File["data"]
+		if !ok {
+			gc.String(http.StatusBadRequest, "value 'data' is missing from the content")
+			return
+		}
+		if len(dataFile) != 1 {
+			gc.String(http.StatusBadRequest, "value 'data' does not contain exactly 1 item")
+			return
+		}
+		df, err := dataFile[0].Open()
+		if err != nil {
+			internalError(gc, fmt.Errorf("failed to open 'data' 'file': %w", err))
+			return
+		}
+		dataBytes, err := ioutil.ReadAll(df)
+		if err != nil {
+			internalError(gc, fmt.Errorf("failed to open 'data' 'file': %w", err))
+			return
+		}
+		dataStr = []string{string(dataBytes)}
+	}
+	if len(dataStr) != 1 {
+		gc.String(http.StatusBadRequest, "value 'data' does not contain exactly 1 item")
+		return
+	}
+
+	var data models.Update
+	err = json.Unmarshal([]byte(dataStr[0]), &data)
+	if err != nil {
+		gc.String(http.StatusBadRequest, "malformed 'data' value: %v", err)
+		return
+	}
+
+	if !isUniqueFeatureID(data.Create) {
+		gc.String(http.StatusBadRequest, "created features do not have unique IDs")
+		return
+	}
+
+	photos := make(map[string]models.Photo, len(form.File))
+	for name, fh := range form.File {
+		if len(fh) != 1 {
+			gc.String(http.StatusBadRequest, "file item %s does not contain exactly 1 file", name)
+			return
+		}
+		var photo models.Photo
+		f := fh[0]
+		photo.ContentType = f.Header.Get("Content-Type")
+		photo.Size = f.Size
+		photo.File, err = f.Open()
+		if err != nil {
+			internalError(gc, fmt.Errorf("failed to open provided photo file: %w", err))
+		}
+		defer photo.File.Close()
+		photos[name] = photo
+	}
+	err = s.update(data, photos)
+	if err != nil {
+		var e *errs.ErrUnsupportedContentType
+		if errors.As(err, &e) {
+			gc.String(http.StatusBadRequest, e.Error())
+			return
+		}
+		internalError(gc, fmt.Errorf("failed to update data: %w", err))
+		return
+	}
+
 	gc.Status(http.StatusNoContent)
 }
 
@@ -171,4 +275,29 @@ func (s *Server) handleGETDataFeatures(gc *gin.Context) {
 		return
 	}
 	gc.JSON(http.StatusOK, pois)
+}
+
+func (s *Server) handleGETDataFeaturesPhoto(gc *gin.Context) {
+	reqFeatureID, err := strconv.Atoi(gc.Param("feature"))
+	if err != nil {
+		gc.String(http.StatusBadRequest, "malformed feature ID")
+		return
+	}
+	reqPhotoID, err := strconv.Atoi(gc.Param("photo"))
+	if err != nil {
+		gc.String(http.StatusBadRequest, "malformed photo ID")
+		return
+	}
+
+	photoBytes, contentType, err := s.getPhoto(models.FeatureID(reqFeatureID), models.FeaturePhotoID(reqPhotoID))
+	if err != nil {
+		if errors.Is(err, errs.ErrPhotoNotExists) {
+			gc.String(http.StatusNotFound, "%v", err)
+		} else {
+			internalError(gc, fmt.Errorf("failed to retrieve photo: %w", err))
+		}
+		return
+	}
+
+	gc.Data(http.StatusOK, contentType, photoBytes)
 }

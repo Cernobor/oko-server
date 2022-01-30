@@ -8,10 +8,17 @@ INSERT INTO users(id, name) VALUES(0, 'system');
 DROP TABLE IF EXISTS features;
 CREATE TABLE IF NOT EXISTS features (
   id integer PRIMARY KEY AUTOINCREMENT,
-  owner_id integer,
+  owner_id integer REFERENCES users(id) ON DELETE CASCADE,
   name text NOT NULL,
   description text,
   category text,
-  geom text NOT NULL,
-  FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+  geom text NOT NULL
+);
+
+DROP TABLE IF EXISTS feature_photos;
+CREATE TABLE IF NOT EXISTS feature_photos (
+  id integer PRIMARY KEY AUTOINCREMENT,
+  feature_id integer NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+  content_type text NOT NULL,
+  file_contents blob NOT NULL
 );
