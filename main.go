@@ -16,6 +16,7 @@ func main() {
 	dbFileArg := flag.String("dbfile", "./data.sqlite3", "File that holds the server's sqlite3 database. Will be created if it does not exist. Default is \"./data.sqlite3\".")
 	tilepackFileArg := flag.String("tilepack", "", "File that will be sent to clients when they request a tile pack. Required.")
 	apkFileArg := flag.String("apk", "", "APK file with the client app. If not specified, no APK will be available (404).")
+	reinitDBArg := flag.Bool("reinit-db", false, "Reinitializes the DB, which means all the tables will be recreated, deleting all data.")
 
 	flag.Parse()
 
@@ -25,7 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	s := server.New(*dbFileArg, *tilepackFileArg, *apkFileArg)
+	s := server.New(*dbFileArg, *tilepackFileArg, *apkFileArg, *reinitDBArg)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)

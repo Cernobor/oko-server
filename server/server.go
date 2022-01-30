@@ -35,14 +35,16 @@ type ServerConfig struct {
 	DbPath       string
 	TilepackPath string
 	ApkPath      string
+	ReinitDB     bool
 }
 
-func New(dbPath, tilepackPath, apkPath string) *Server {
+func New(dbPath, tilepackPath, apkPath string, reinitDB bool) *Server {
 	return &Server{
 		config: ServerConfig{
 			DbPath:       dbPath,
 			TilepackPath: tilepackPath,
 			ApkPath:      apkPath,
+			ReinitDB:     reinitDB,
 		},
 	}
 }
@@ -52,7 +54,7 @@ func (s *Server) Run(ctx context.Context) {
 	s.log.SetLevel(logrus.DebugLevel)
 
 	s.ctx = ctx
-	s.setupDB(true)
+	s.setupDB()
 	s.setupTiles()
 
 	router := s.setupRouter()
@@ -89,14 +91,14 @@ func (s *Server) getDbConn() *sqlite.Conn {
 	return conn
 }
 
-func (s *Server) setupDB(reinit bool) {
+func (s *Server) setupDB() {
 	dbpool, err := sqlitex.Open(fmt.Sprintf("file:%s", s.config.DbPath), 0, 10)
 	if err != nil {
 		s.log.WithError(err).Fatal("Failed to open/create DB.")
 	}
 	s.dbpool = dbpool
 
-	if reinit {
+	if s.config.ReinitDB {
 		conn := s.getDbConn()
 		defer s.dbpool.Put(conn)
 
