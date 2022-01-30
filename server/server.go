@@ -274,10 +274,10 @@ func (s *Server) getFeatures(conn *sqlite.Conn) ([]models.Feature, error) {
 	}
 
 	features := make([]models.Feature, 0, 100)
-	err := sqlitex.Exec(conn, `select f.id, f.owner_id, f.name, f.description, f.category, f.geom, '[' || coalesce(group_concat(p.id, ', '), '') || ']'
+	err := sqlitex.Exec(conn, `select f.id, f.owner_id, f.name, f.properties, f.geom, '[' || coalesce(group_concat(p.id, ', '), '') || ']'
 		from features f
 		left join feature_photos p on f.id = p.feature_id
-		group by f.id, f.owner_id, f.name, f.description, f.category, f.geom`, func(stmt *sqlite.Stmt) error {
+		group by f.id, f.owner_id, f.name, f.properties, f.geom`, func(stmt *sqlite.Stmt) error {
 
 		id := stmt.ColumnInt64(0)
 
@@ -288,24 +288,21 @@ func (s *Server) getFeatures(conn *sqlite.Conn) ([]models.Feature, error) {
 
 		name := stmt.ColumnText(2)
 
-		var description *string
-		if stmt.ColumnType(3) != sqlite.SQLITE_NULL {
-			description = ptrString(stmt.ColumnText(3))
-		}
-
-		var category *string
-		if stmt.ColumnType(4) != sqlite.SQLITE_NULL {
-			category = ptrString(stmt.ColumnText(4))
-		}
-
-		geomRaw := stmt.ColumnText(5)
-		var geom geojson.Geometry
-		err := json.Unmarshal([]byte(geomRaw), &geom)
+		propertiesRaw := stmt.ColumnText(3)
+		var properties map[string]interface{}
+		err := json.Unmarshal([]byte(propertiesRaw), &properties)
 		if err != nil {
-			return fmt.Errorf("failed to parse geometry for point id=%d: %w", id, err)
+			return fmt.Errorf("failed to parse properties for feature id=%d: %w", id, err)
 		}
 
-		photosRaw := stmt.ColumnText(6)
+		geomRaw := stmt.ColumnText(4)
+		var geom geojson.Geometry
+		err = json.Unmarshal([]byte(geomRaw), &geom)
+		if err != nil {
+			return fmt.Errorf("failed to parse geometry for feature id=%d: %w", id, err)
+		}
+
+		photosRaw := stmt.ColumnText(5)
 		var photos []models.FeaturePhotoID
 		err = json.Unmarshal([]byte(photosRaw), &photos)
 		if err != nil {
@@ -313,13 +310,12 @@ func (s *Server) getFeatures(conn *sqlite.Conn) ([]models.Feature, error) {
 		}
 
 		feature := models.Feature{
-			ID:          models.FeatureID(id),
-			OwnerID:     (*models.UserID)(ownerID),
-			Name:        name,
-			Description: description,
-			Category:    category,
-			Geometry:    geom,
-			PhotoIDs:    photos,
+			ID:         models.FeatureID(id),
+			OwnerID:    (*models.UserID)(ownerID),
+			Name:       name,
+			Properties: properties,
+			Geometry:   geom,
+			PhotoIDs:   photos,
 		}
 
 		features = append(features, feature)
@@ -332,7 +328,7 @@ func (s *Server) getFeatures(conn *sqlite.Conn) ([]models.Feature, error) {
 }
 
 func (s *Server) addFeatures(conn *sqlite.Conn, features []models.Feature) (map[models.FeatureID]models.FeatureID, error) {
-	stmt, err := conn.Prepare("insert into features(owner_id, name, description, category, geom) values(?, ?, ?, ?, ?)")
+	stmt, err := conn.Prepare("insert into features(owner_id, name, properties, geom) values(?, ?, ?, ?)")
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare statement: %w", err)
 	}
@@ -357,22 +353,24 @@ func (s *Server) addFeatures(conn *sqlite.Conn, features []models.Feature) (map[
 		} else {
 			stmt.BindInt64(1, int64(*feature.OwnerID))
 		}
+
 		stmt.BindText(2, feature.Name)
-		if feature.Description == nil {
-			stmt.BindNull(3)
+
+		if feature.Properties == nil {
+			stmt.BindText(3, "{}")
 		} else {
-			stmt.BindText(3, *feature.Description)
+			propertiesBytes, err := json.Marshal(feature.Properties)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal properties of feature id=%d: %w", feature.ID, err)
+			}
+			stmt.BindText(3, string(propertiesBytes))
 		}
-		if feature.Category == nil {
-			stmt.BindNull(4)
-		} else {
-			stmt.BindText(4, *feature.Category)
-		}
+
 		geomBytes, err := json.Marshal(feature.Geometry)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal geometry of feature ID %d: %w", feature.ID, err)
+			return nil, fmt.Errorf("failed to marshal geometry of feature id=%d: %w", feature.ID, err)
 		}
-		stmt.BindText(5, string(geomBytes))
+		stmt.BindText(4, string(geomBytes))
 
 		_, err = stmt.Step()
 		if err != nil {
@@ -457,7 +455,7 @@ func (s *Server) addPhotos(conn *sqlite.Conn, createdFeatureMapping, addedFeatur
 }
 
 func (s *Server) updateFeatures(conn *sqlite.Conn, features []models.Feature) error {
-	stmt, err := conn.Prepare("update features set owner_id = ?, name = ?, description = ?, category = ?, geom = ? where id = ?")
+	stmt, err := conn.Prepare("update features set owner_id = ?, name = ?, properties = ?, geom = ? where id = ?")
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
@@ -478,23 +476,26 @@ func (s *Server) updateFeatures(conn *sqlite.Conn, features []models.Feature) er
 		} else {
 			stmt.BindInt64(1, int64(*feature.OwnerID))
 		}
+
 		stmt.BindText(2, feature.Name)
-		if feature.Description == nil {
-			stmt.BindNull(3)
+
+		if feature.Properties == nil {
+			stmt.BindText(3, "{}")
 		} else {
-			stmt.BindText(3, *feature.Description)
+			propertiesBytes, err := json.Marshal(feature.Properties)
+			if err != nil {
+				return fmt.Errorf("failed to marshal properties of feature id=%d: %w", feature.ID, err)
+			}
+			stmt.BindText(3, string(propertiesBytes))
 		}
-		if feature.Category == nil {
-			stmt.BindNull(4)
-		} else {
-			stmt.BindText(4, *feature.Category)
-		}
+
 		geomBytes, err := json.Marshal(feature.Geometry)
 		if err != nil {
 			return fmt.Errorf("failed to marshal geometry of feature ID %d: %w", feature.ID, err)
 		}
-		stmt.BindText(5, string(geomBytes))
-		stmt.BindInt64(6, int64(feature.ID))
+		stmt.BindText(4, string(geomBytes))
+
+		stmt.BindInt64(5, int64(feature.ID))
 
 		_, err = stmt.Step()
 		if err != nil {

@@ -10,8 +10,7 @@ CREATE TABLE IF NOT EXISTS features (
   id integer PRIMARY KEY AUTOINCREMENT,
   owner_id integer REFERENCES users(id) ON DELETE CASCADE,
   name text NOT NULL,
-  description text,
-  category text,
+  properties text NOT NULL,
   geom text NOT NULL
 );
 

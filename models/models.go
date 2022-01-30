@@ -20,12 +20,11 @@ type User struct {
 type Feature struct {
 	// ID is an ID of the feature.
 	// When the feature is submitted by a client for creation (i.e. in Update.Create) it is considered a 'local' ID which must be unique across all submitted features.
-	ID          FeatureID        `json:"id"`
-	OwnerID     *UserID          `json:"owner_id"`
-	Name        string           `json:"name"`
-	Description *string          `json:"description"`
-	Category    *string          `json:"category"`
-	Geometry    geojson.Geometry `json:"geometry"`
+	ID         FeatureID              `json:"id"`
+	OwnerID    *UserID                `json:"owner_id"`
+	Name       string                 `json:"name"`
+	Properties map[string]interface{} `json:"properties"`
+	Geometry   geojson.Geometry       `json:"geometry"`
 	// PhotoIDs contains a list IDs of photos associated with the feature.
 	// When the feature is retrieved from the server, the IDs can be used to retrieve the photos.
 	// When the feature is submitted by a client (created or updated, i.e. in Update.Create or Update.Update), this list is ignored (as photos are managed through Update.CreatePhotos and Update.DeletePhotos fields).
