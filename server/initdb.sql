@@ -8,7 +8,7 @@ INSERT INTO users(id, name) VALUES(0, 'system');
 DROP TABLE IF EXISTS features;
 CREATE TABLE IF NOT EXISTS features (
   id integer PRIMARY KEY AUTOINCREMENT,
-  owner_id integer REFERENCES users(id) ON DELETE CASCADE,
+  owner_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name text NOT NULL,
   properties text NOT NULL,
   geom text NOT NULL

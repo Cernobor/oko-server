@@ -21,7 +21,7 @@ type Feature struct {
 	// ID is an ID of the feature.
 	// When the feature is submitted by a client for creation (i.e. in Update.Create) it is considered a 'local' ID which must be unique across all submitted features.
 	ID         FeatureID              `json:"id"`
-	OwnerID    *UserID                `json:"owner_id"`
+	OwnerID    UserID                 `json:"owner_id"`
 	Name       string                 `json:"name"`
 	Properties map[string]interface{} `json:"properties"`
 	Geometry   geojson.Geometry       `json:"geometry"`

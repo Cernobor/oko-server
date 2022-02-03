@@ -283,10 +283,7 @@ func (s *Server) getFeatures(conn *sqlite.Conn) ([]models.Feature, error) {
 
 		id := stmt.ColumnInt64(0)
 
-		var ownerID *int64
-		if stmt.ColumnType(1) != sqlite.SQLITE_NULL {
-			ownerID = ptrInt64(stmt.ColumnInt64(1))
-		}
+		ownerID := stmt.ColumnInt64(1)
 
 		name := stmt.ColumnText(2)
 
@@ -313,7 +310,7 @@ func (s *Server) getFeatures(conn *sqlite.Conn) ([]models.Feature, error) {
 
 		feature := models.Feature{
 			ID:         models.FeatureID(id),
-			OwnerID:    (*models.UserID)(ownerID),
+			OwnerID:    models.UserID(ownerID),
 			Name:       name,
 			Properties: properties,
 			Geometry:   geom,
@@ -350,11 +347,7 @@ func (s *Server) addFeatures(conn *sqlite.Conn, features []models.Feature) (map[
 			return nil, fmt.Errorf("failed to clear bindings of prepared statement: %w", err)
 		}
 
-		if feature.OwnerID == nil {
-			stmt.BindNull(1)
-		} else {
-			stmt.BindInt64(1, int64(*feature.OwnerID))
-		}
+		stmt.BindInt64(1, int64(feature.OwnerID))
 
 		stmt.BindText(2, feature.Name)
 
@@ -473,11 +466,7 @@ func (s *Server) updateFeatures(conn *sqlite.Conn, features []models.Feature) er
 			return fmt.Errorf("failed to clear bindings of prepared statement: %w", err)
 		}
 
-		if feature.OwnerID == nil {
-			stmt.BindNull(1)
-		} else {
-			stmt.BindInt64(1, int64(*feature.OwnerID))
-		}
+		stmt.BindInt64(1, int64(feature.OwnerID))
 
 		stmt.BindText(2, feature.Name)
 
