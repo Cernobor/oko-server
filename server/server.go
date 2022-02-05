@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	_ "embed"
@@ -29,23 +30,21 @@ type Server struct {
 	log             *logrus.Logger
 	ctx             context.Context
 	tileserverSvSet *mbsh.ServiceSet
+	mapPackSize     int64
 }
 
 type ServerConfig struct {
-	DbPath       string
-	TilepackPath string
-	ApkPath      string
-	ReinitDB     bool
+	DbPath        string
+	TilepackPath  string
+	ApkPath       string
+	ReinitDB      bool
+	MinZoom       int
+	DefaultCenter models.Coords
 }
 
-func New(dbPath, tilepackPath, apkPath string, reinitDB bool) *Server {
+func New(config ServerConfig) *Server {
 	return &Server{
-		config: ServerConfig{
-			DbPath:       dbPath,
-			TilepackPath: tilepackPath,
-			ApkPath:      apkPath,
-			ReinitDB:     reinitDB,
-		},
+		config: config,
 	}
 }
 
@@ -63,6 +62,7 @@ func (s *Server) Run(ctx context.Context) {
 		Addr:    fmt.Sprintf(":%d", 8080),
 		Handler: router,
 	}
+	s.log.Infof("Running on %s", server.Addr)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.log.Infof("listen: %s\n", err)
@@ -99,6 +99,7 @@ func (s *Server) setupDB() {
 	s.dbpool = dbpool
 
 	if s.config.ReinitDB {
+		s.log.Info("Reinitializing DB.")
 		conn := s.getDbConn()
 		defer s.dbpool.Put(conn)
 
@@ -124,24 +125,30 @@ func (s *Server) setupTiles() {
 	if err != nil {
 		s.log.WithError(err).Fatal("Failed to create tileserver service set.")
 	}
-	err = svs.AddTileset(s.config.TilepackPath, "main")
+	err = svs.AddTileset(s.config.TilepackPath, "map")
 	if err != nil {
-		s.log.WithError(err).Fatal("Failed to register main tileset.")
+		s.log.WithError(err).Fatal("Failed to register tileset.")
 	}
 	s.tileserverSvSet = svs
+
+	info, err := os.Stat(s.config.TilepackPath)
+	if err != nil {
+		s.log.WithError(err).Fatal("Failed to get info about tile pack file.")
+	}
+	s.mapPackSize = info.Size()
 }
 
 func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) {
 	conn := s.getDbConn()
 	defer s.dbpool.Put(conn)
 
-	userID, err := func() (uid int, err error) {
+	userID, err := func() (uid int64, err error) {
 		defer sqlitex.Save(conn)(&err)
 
-		var id *int
+		var id *int64
 		if hc.Exists {
 			err = sqlitex.Exec(conn, "select id from users where name = ?", func(stmt *sqlite.Stmt) error {
-				id = ptrInt(stmt.ColumnInt(0))
+				id = ptrInt64(stmt.ColumnInt64(0))
 				return nil
 			}, hc.Name)
 			if sqlite.ErrCode(err) != sqlite.SQLITE_OK {
@@ -154,8 +161,8 @@ func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) 
 				return 0, errs.ErrAttemptedSystemUser
 			}
 		} else {
-			err = sqlitex.Exec(conn, "insert into users(name) values(?) returning id", func(stmt *sqlite.Stmt) error {
-				id = ptrInt(stmt.ColumnInt(0))
+			err = sqlitex.Exec(conn, "insert into users(name) values(?)", func(stmt *sqlite.Stmt) error {
+				id = ptrInt64(stmt.ColumnInt64(0))
 				return nil
 			}, hc.Name)
 			if sqlite.ErrCode(err) == sqlite.SQLITE_CONSTRAINT_UNIQUE {
@@ -164,6 +171,7 @@ func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) 
 			if sqlite.ErrCode(err) != sqlite.SQLITE_OK {
 				return 0, err
 			}
+			id = ptrInt64(conn.LastInsertRowID())
 		}
 		return *id, nil
 	}()

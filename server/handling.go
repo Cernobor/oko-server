@@ -86,7 +86,7 @@ func (s *Server) setupRouter() *gin.Engine {
 	})
 
 	// resources
-	router.GET(URITilepack, s.handleGETTilepack)
+	router.GET(URIMapPack, s.handleGETTilepack)
 
 	// API
 	router.POST(URIHandshake, s.handlePOSTHandshake)
@@ -129,9 +129,15 @@ func (s *Server) handlePOSTHandshake(gc *gin.Context) {
 	}
 
 	gc.JSON(http.StatusOK, models.HandshakeResponse{
-		ID:           id,
-		Name:         hs.Name,
-		TilePackPath: URITilepack,
+		ID:   id,
+		Name: hs.Name,
+		MapInfo: models.MapInfo{
+			MapPackPath:      URIMapPack,
+			MapPackSize:      s.mapPackSize,
+			TilePathTemplate: URITileTemplate,
+			MinZoom:          s.config.MinZoom,
+			DefaultCenter:    s.config.DefaultCenter,
+		},
 	})
 }
 

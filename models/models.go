@@ -33,6 +33,19 @@ type Feature struct {
 
 // transport objects
 
+type Coords struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
+}
+
+type MapInfo struct {
+	MapPackPath      string `json:"map_pack_path"`
+	MapPackSize      int64  `json:"map_pack_size"`
+	TilePathTemplate string `json:"tile_path_template"`
+	MinZoom          int    `json:"min_zoom"`
+	DefaultCenter    Coords `json:"default_center"`
+}
+
 type Update struct {
 	Create        []Feature              `json:"create"`
 	CreatedPhotos map[FeatureID][]string `json:"created_photos"`
@@ -48,9 +61,9 @@ type HandshakeChallenge struct {
 }
 
 type HandshakeResponse struct {
-	ID           UserID `json:"id"`
-	Name         string `json:"name"`
-	TilePackPath string `json:"tile_pack_path"`
+	ID      UserID  `json:"id"`
+	Name    string  `json:"name"`
+	MapInfo MapInfo `json:"map_info"`
 }
 
 type Data struct {
