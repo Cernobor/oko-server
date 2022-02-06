@@ -206,6 +206,7 @@ func (s *Server) getData() (models.Data, error) {
 }
 
 func (s *Server) update(data models.Update, photos map[string]models.Photo) error {
+	s.log.Debugf("Updating data: %d created, %d created photos, %d updated, %d deleted, %d deleted photos, %d photo files", len(data.Create), len(data.CreatedPhotos), len(data.Update), len(data.Delete), len(data.DeletePhotos), len(photos))
 	conn := s.getDbConn()
 	defer s.dbpool.Put(conn)
 
