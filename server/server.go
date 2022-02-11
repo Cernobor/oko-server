@@ -34,6 +34,7 @@ type Server struct {
 }
 
 type ServerConfig struct {
+	Port          int
 	DbPath        string
 	TilepackPath  string
 	ApkPath       string
@@ -59,7 +60,7 @@ func (s *Server) Run(ctx context.Context) {
 	router := s.setupRouter()
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", 8080),
+		Addr:    fmt.Sprintf(":%d", s.config.Port),
 		Handler: router,
 	}
 	s.log.Infof("Running on %s", server.Addr)
