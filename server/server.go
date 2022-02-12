@@ -100,11 +100,7 @@ func (s *Server) setupDB() {
 	s.dbpool = dbpool
 
 	if s.config.ReinitDB {
-		s.log.Info("Reinitializing DB.")
-		conn := s.getDbConn()
-		defer s.dbpool.Put(conn)
-
-		err = sqlitex.ExecScript(conn, initDB)
+		err = s.reinitDB()
 		if err != nil {
 			s.log.WithError(err).Fatal("init DB transaction failed")
 		}
@@ -137,6 +133,14 @@ func (s *Server) setupTiles() {
 		s.log.WithError(err).Fatal("Failed to get info about tile pack file.")
 	}
 	s.mapPackSize = info.Size()
+}
+
+func (s *Server) reinitDB() error {
+	s.log.Info("Reinitializing DB.")
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+
+	return sqlitex.ExecScript(conn, initDB)
 }
 
 func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) {

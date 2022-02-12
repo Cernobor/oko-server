@@ -4,6 +4,7 @@ const (
 	URIPing              = "/ping"
 	URIHardFail          = "/hard-fail"
 	URISoftFail          = "/soft-fail"
+	URIReinit            = "/reinit"
 	URIMapPack           = "/mappack"
 	URIHandshake         = "/handshake"
 	URIData              = "/data"

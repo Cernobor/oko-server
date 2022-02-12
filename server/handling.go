@@ -22,6 +22,7 @@ func internalError(gc *gin.Context, err error) {
 }
 
 func (s *Server) setupRouter() *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
 
@@ -68,6 +69,8 @@ func (s *Server) setupRouter() *gin.Engine {
 				entry.Error(msg)
 			} else if statusCode >= 400 {
 				entry.Warn(msg)
+			} else if path == URIPing {
+				entry.Debug(msg)
 			} else {
 				entry.Info(msg)
 			}
@@ -84,6 +87,7 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.GET(URISoftFail, func(gc *gin.Context) {
 		gc.JSON(http.StatusOK, map[string]string{"error": "artificial fail"})
 	})
+	router.POST(URIReinit, s.handlePOSTReset)
 
 	// resources
 	router.GET(URIMapPack, s.handleGETTilepack)
@@ -100,6 +104,15 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.GET(URITileserver, gin.WrapH(s.tileserverSvSet.Handler()))
 
 	return router
+}
+
+func (s *Server) handlePOSTReset(gc *gin.Context) {
+	err := s.reinitDB()
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	gc.Status(http.StatusOK)
 }
 
 func (s *Server) handleGETTilepack(gc *gin.Context) {
