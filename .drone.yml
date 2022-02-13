@@ -1,0 +1,20 @@
+kind: pipeline
+type: docker
+name: default
+
+steps:
+- name: deploy
+  image: caprover/cli-caprover:2.2.3
+  commands:
+  - caprover deploy
+  environment:
+    CAPROVER_URL: 
+      from_secret: caprover_url
+    CAPROVER_APP:
+      from_secret: caprover_app
+    CAPROVER_APP_TOKEN:
+      from_secret: app_token
+    CAPROVER_BRANCH: master
+  when:
+    branch:
+    - master
