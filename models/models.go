@@ -2,6 +2,7 @@ package models
 
 import (
 	"io"
+	"time"
 
 	geojson "github.com/paulmach/go.geojson"
 )
@@ -23,6 +24,7 @@ type Feature struct {
 	ID         FeatureID              `json:"id"`
 	OwnerID    UserID                 `json:"owner_id"`
 	Name       string                 `json:"name"`
+	Deadline   *time.Time             `json:"deadline,omitempty"`
 	Properties map[string]interface{} `json:"properties"`
 	Geometry   geojson.Geometry       `json:"geometry"`
 	// PhotoIDs contains a list IDs of photos associated with the feature.
