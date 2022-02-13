@@ -14,7 +14,7 @@ steps:
       from_secret: caprover_app
     CAPROVER_APP_TOKEN:
       from_secret: app_token
-    CAPROVER_BRANCH: master
+    CAPROVER_BRANCH: main
   when:
     branch:
-    - master
+    - main
