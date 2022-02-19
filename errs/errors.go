@@ -34,6 +34,22 @@ func (e *ErrPhotoNotProvided) Error() string {
 	return fmt.Sprintf("referenced photo %s which was not provided", e.Reference)
 }
 
+type EErrPhotoThumbnailNotProvided *ErrPhotoThumbnailNotProvided
+
+type ErrPhotoThumbnailNotProvided struct {
+	Reference string
+}
+
+func NewErrPhotoThumbnailNotProvided(reference string) *ErrPhotoThumbnailNotProvided {
+	return &ErrPhotoThumbnailNotProvided{
+		Reference: reference,
+	}
+}
+
+func (e *ErrPhotoThumbnailNotProvided) Error() string {
+	return fmt.Sprintf("referenced photo %s the thumbnail of which was not provided", e.Reference)
+}
+
 type ErrFeatureForPhotoNotExists struct {
 	PhotoFeatureReference int64
 }

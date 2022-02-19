@@ -69,12 +69,20 @@ type HandshakeResponse struct {
 }
 
 type Data struct {
-	Users    []User    `json:"users"`
-	Features []Feature `json:"features"`
+	Users         []User                   `json:"users"`
+	Features      []Feature                `json:"features"`
+	PhotoMetadata map[string]PhotoMetadata `json:"photo_metadata,omitempty"`
 }
 
 type Photo struct {
 	ContentType string
 	File        io.ReadCloser
 	Size        int64
+}
+
+type PhotoMetadata struct {
+	ContentType       string         `json:"content_type"`
+	Size              int64          `json:"size"`
+	ID                FeaturePhotoID `json:"id"`
+	ThumbnailFilename string         `json:"thumbnail_filename"`
 }

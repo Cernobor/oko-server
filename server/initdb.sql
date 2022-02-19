@@ -20,5 +20,6 @@ CREATE TABLE IF NOT EXISTS feature_photos (
   id integer PRIMARY KEY AUTOINCREMENT,
   feature_id integer NOT NULL REFERENCES features(id) ON DELETE CASCADE,
   content_type text NOT NULL,
+  thumbnail_contents blob NOT NULL,
   file_contents blob NOT NULL
 );

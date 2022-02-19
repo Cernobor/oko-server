@@ -155,12 +155,40 @@ func (s *Server) handlePOSTHandshake(gc *gin.Context) {
 }
 
 func (s *Server) handleGETData(gc *gin.Context) {
-	data, err := s.getData()
-	if err != nil {
-		internalError(gc, err)
+	accept := gc.GetHeader("Accept")
+	if accept == "application/json" {
+		data, err := s.getDataOnly()
+		if err != nil {
+			internalError(gc, err)
+			return
+		}
+		gc.JSON(http.StatusOK, data)
+		return
+	} else if accept == "application/zip" {
+		file, err := s.getDataWithPhotos()
+		defer func() {
+			file.Close()
+			os.Remove(file.Name())
+		}()
+		if err != nil {
+			internalError(gc, err)
+			return
+		}
+		fi, err := file.Stat()
+		if err != nil {
+			internalError(gc, err)
+			return
+		}
+		size := fi.Size()
+		_, err = file.Seek(0, 0)
+		if err != nil {
+			internalError(gc, err)
+			return
+		}
+		gc.DataFromReader(http.StatusOK, size, "application/zip", file, nil)
 		return
 	}
-	gc.JSON(http.StatusOK, data)
+	gc.String(http.StatusNotAcceptable, "%s is not acceptable", accept)
 }
 
 func (s *Server) handlePOSTData(gc *gin.Context) {

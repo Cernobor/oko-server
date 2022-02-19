@@ -1,6 +1,7 @@
 package server
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -187,31 +188,144 @@ func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) 
 	return models.UserID(userID), nil
 }
 
-func (s *Server) getData() (models.Data, error) {
+func (s *Server) getData(conn *sqlite.Conn) (data models.Data, err error) {
+	err = s.deleteExpiredFeatures(conn)
+	if err != nil {
+		return models.Data{}, fmt.Errorf("failed to delete expired featured: %w", err)
+	}
+	people, err := s.getPeople(conn)
+	if err != nil {
+		return models.Data{}, fmt.Errorf("failed to retreive people: %w", err)
+	}
+	features, err := s.getFeatures(conn)
+	if err != nil {
+		return models.Data{}, fmt.Errorf("failed to retreive features: %w", err)
+	}
+
+	return models.Data{
+		Users:    people,
+		Features: features,
+	}, nil
+}
+
+func (s *Server) getDataOnly() (data models.Data, err error) {
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+	defer sqlitex.Save(conn)(&err)
+
+	data, err = s.getData(conn)
+	if err != nil {
+		return models.Data{}, fmt.Errorf("failed to get json data: %w", err)
+	}
+	return data, err
+}
+
+func (s *Server) getDataWithPhotos() (file *os.File, err error) {
 	conn := s.getDbConn()
 	defer s.dbpool.Put(conn)
 
-	return func() (data models.Data, err error) {
-		defer sqlitex.Save(conn)(&err)
+	defer sqlitex.Save(conn)(&err)
 
-		err = s.deleteExpiredFeatures(conn)
-		if err != nil {
-			return models.Data{}, fmt.Errorf("failed to delete expired featured: %w", err)
+	makePhotoFilename := func(id models.FeaturePhotoID) string {
+		return fmt.Sprintf("img%d", id)
+	}
+	makeThumbnailFilename := func(id models.FeaturePhotoID) string {
+		return fmt.Sprintf("thumb_%s", makePhotoFilename(id))
+	}
+
+	data, err := s.getData(conn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get json data: %w", err)
+	}
+
+	data.PhotoMetadata = make(map[string]models.PhotoMetadata, 100)
+	err = sqlitex.Exec(conn, "select id, content_type, length(file_contents) from feature_photos", func(stmt *sqlite.Stmt) error {
+		id := models.FeaturePhotoID(stmt.ColumnInt64(0))
+		contentType := stmt.ColumnText(1)
+		fileSize := stmt.ColumnInt64(2)
+		data.PhotoMetadata[makePhotoFilename(id)] = models.PhotoMetadata{
+			ContentType:       contentType,
+			Size:              fileSize,
+			ID:                id,
+			ThumbnailFilename: makeThumbnailFilename(id),
 		}
-		people, err := s.getPeople(conn)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect photo metadata: %w", err)
+	}
+
+	dataBytes, err := json.MarshalIndent(&data, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal json data: %w", err)
+	}
+
+	f, err := os.CreateTemp("", "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary file: %w", err)
+	}
+
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+	w, err := zw.Create("data.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data zip entry: %w", err)
+	}
+	_, err = w.Write(dataBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write data zip entry: %w", err)
+	}
+
+	err = sqlitex.Exec(conn, "select id from feature_photos", func(stmt *sqlite.Stmt) error {
+		id := stmt.ColumnInt64(0)
+
+		blob, err := conn.OpenBlob("", "feature_photos", "thumbnail_contents", id, false)
 		if err != nil {
-			return models.Data{}, fmt.Errorf("failed to retreive people: %w", err)
+			return fmt.Errorf("failed to open photo ID %d thumbnail content blob: %w", id, err)
 		}
-		features, err := s.getFeatures(conn)
+		err = func() error {
+			defer blob.Close()
+			w, err := zw.Create(makeThumbnailFilename(models.FeaturePhotoID(id)))
+			if err != nil {
+				return fmt.Errorf("failed to create zip entry: %w", err)
+			}
+			_, err = io.Copy(w, blob)
+			if err != nil {
+				return fmt.Errorf("failed to write zip entry: %w", err)
+			}
+			return nil
+		}()
 		if err != nil {
-			return models.Data{}, fmt.Errorf("failed to retreive features: %w", err)
+			return fmt.Errorf("failed to write photo ID %d thumbnail: %w", id, err)
 		}
 
-		return models.Data{
-			Users:    people,
-			Features: features,
-		}, nil
-	}()
+		blob, err = conn.OpenBlob("", "feature_photos", "file_contents", id, false)
+		if err != nil {
+			return fmt.Errorf("failed to open photo ID %d photo content blob: %w", id, err)
+		}
+		err = func() error {
+			defer blob.Close()
+			w, err := zw.Create(makePhotoFilename(models.FeaturePhotoID(id)))
+			if err != nil {
+				return fmt.Errorf("failed to create zip entry: %w", err)
+			}
+			_, err = io.Copy(w, blob)
+			if err != nil {
+				return fmt.Errorf("failed to write zip entry: %w", err)
+			}
+			return nil
+		}()
+		if err != nil {
+			return fmt.Errorf("failed to write photo ID %d photo: %w", id, err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect photo files: %w", err)
+	}
+
+	return f, nil
 }
 
 func (s *Server) update(data models.Update, photos map[string]models.Photo) error {
@@ -424,7 +538,7 @@ func (s *Server) addFeatures(conn *sqlite.Conn, features []models.Feature) (map[
 }
 
 func (s *Server) addPhotos(conn *sqlite.Conn, createdFeatureMapping, addedFeatureMapping map[models.FeatureID][]string, createdIDMapping map[models.FeatureID]models.FeatureID, photos map[string]models.Photo) error {
-	stmt, err := conn.Prepare("insert into feature_photos(feature_id, content_type, file_contents) values(?, ?, ?)")
+	stmt, err := conn.Prepare("insert into feature_photos(feature_id, content_type, thumbnail_contents, file_contents) values(?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
@@ -435,6 +549,10 @@ func (s *Server) addPhotos(conn *sqlite.Conn, createdFeatureMapping, addedFeatur
 			photo, ok := photos[photoName]
 			if !ok {
 				return errs.NewErrPhotoNotProvided(photoName)
+			}
+			thumbnail, ok := photos[fmt.Sprintf("thumb_%s", photoName)]
+			if !ok {
+				return errs.NewErrPhotoThumbnailNotProvided(photoName)
 			}
 			if !checkImageContentType(photo.ContentType) {
 				return errs.NewErrUnsupportedContentType(photoName)
@@ -451,14 +569,30 @@ func (s *Server) addPhotos(conn *sqlite.Conn, createdFeatureMapping, addedFeatur
 
 			stmt.BindInt64(1, int64(featureID))
 			stmt.BindText(2, photo.ContentType)
-			stmt.BindZeroBlob(3, photo.Size)
+			stmt.BindZeroBlob(3, thumbnail.Size)
+			stmt.BindZeroBlob(4, photo.Size)
 
 			_, err = stmt.Step()
 			if err != nil {
 				return fmt.Errorf("failed to evaluate prepared statement: %w", err)
 			}
 
-			blob, err := conn.OpenBlob("", "feature_photos", "file_contents", conn.LastInsertRowID(), true)
+			blob, err := conn.OpenBlob("", "feature_photos", "thumbnail_contents", conn.LastInsertRowID(), true)
+			if err != nil {
+				return fmt.Errorf("failed to open thumbnail content blob: %w", err)
+			}
+			err = func() error {
+				defer blob.Close()
+				defer thumbnail.File.Close()
+
+				_, err := io.Copy(blob, thumbnail.File)
+				return err
+			}()
+			if err != nil {
+				return fmt.Errorf("failed to write to thumbnail content blob: %w", err)
+			}
+
+			blob, err = conn.OpenBlob("", "feature_photos", "file_contents", conn.LastInsertRowID(), true)
 			if err != nil {
 				return fmt.Errorf("failed to open photo content blob: %w", err)
 			}
