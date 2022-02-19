@@ -33,6 +33,11 @@ type Feature struct {
 	PhotoIDs []FeaturePhotoID `json:"photo_ids"`
 }
 
+type BuildInfo struct {
+	VersionHash string     `json:"version_hash"`
+	BuildTime   *time.Time `json:"build_time"`
+}
+
 // transport objects
 
 type Coords struct {

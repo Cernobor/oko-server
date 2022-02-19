@@ -2,6 +2,7 @@ package server
 
 const (
 	URIPing              = "/ping"
+	URIBuildInfo         = "/build-info"
 	URIHardFail          = "/hard-fail"
 	URISoftFail          = "/soft-fail"
 	URIReinit            = "/reinit"

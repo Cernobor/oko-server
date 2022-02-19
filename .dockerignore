@@ -38,4 +38,3 @@ go.work
 oko-server
 *.sqlite*
 .vscode
-.git

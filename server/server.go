@@ -35,6 +35,8 @@ type Server struct {
 }
 
 type ServerConfig struct {
+	VersionHash   string
+	BuildTime     *time.Time
 	Port          int
 	DbPath        string
 	TilepackPath  string

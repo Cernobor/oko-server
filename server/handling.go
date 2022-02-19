@@ -81,6 +81,12 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.GET(URIPing, func(gc *gin.Context) {
 		gc.Status(http.StatusNoContent)
 	})
+	router.GET(URIBuildInfo, func(gc *gin.Context) {
+		gc.JSON(http.StatusOK, models.BuildInfo{
+			VersionHash: s.config.VersionHash,
+			BuildTime:   s.config.BuildTime,
+		})
+	})
 	router.GET(URIHardFail, func(gc *gin.Context) {
 		gc.Status(http.StatusNotImplemented)
 	})

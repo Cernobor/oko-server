@@ -7,10 +7,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"cernobor.cz/oko-server/models"
 	"cernobor.cz/oko-server/server"
 	"github.com/sirupsen/logrus"
+)
+
+var (
+	sha1ver   string
+	buildTime string
 )
 
 func main() {
@@ -31,7 +37,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	t, err := time.Parse(time.RFC3339, buildTime)
+	if err != nil {
+		t = time.Now()
+	}
+
 	s := server.New(server.ServerConfig{
+		VersionHash:  sha1ver,
+		BuildTime:    &t,
 		Port:         *portArg,
 		DbPath:       *dbFileArg,
 		TilepackPath: *tilepackFileArg,
