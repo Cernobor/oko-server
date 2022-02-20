@@ -19,7 +19,8 @@ DROP TABLE IF EXISTS feature_photos;
 CREATE TABLE IF NOT EXISTS feature_photos (
   id integer PRIMARY KEY AUTOINCREMENT,
   feature_id integer NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+  thumbnail_content_type text NOT NULL,
   content_type text NOT NULL,
   thumbnail_contents blob NOT NULL,
-  file_contents blob NOT NULL
+  contents blob NOT NULL
 );

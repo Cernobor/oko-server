@@ -86,8 +86,9 @@ type Photo struct {
 }
 
 type PhotoMetadata struct {
-	ContentType       string         `json:"content_type"`
-	Size              int64          `json:"size"`
-	ID                FeaturePhotoID `json:"id"`
-	ThumbnailFilename string         `json:"thumbnail_filename"`
+	ContentType          string         `json:"content_type"`
+	ThumbnailContentType string         `json:"thumbnail_content_type"`
+	Size                 int64          `json:"size"`
+	ID                   FeaturePhotoID `json:"id"`
+	ThumbnailFilename    string         `json:"thumbnail_filename"`
 }

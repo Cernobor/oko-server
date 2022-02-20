@@ -3,9 +3,9 @@ FROM alpine:3.15.0 AS build
 VOLUME ["/data"]
 COPY . /oko-server/git
 
-RUN apk add --no-cache go git && \
+RUN apk add --no-cache go && \
     cd /oko-server/git && \
-    go build -ldflags "-X \"main.sha1ver=$(git rev-parse HEAD)\" -X \"main.buildTime=$(date -Iseconds)\""
+    go build -ldflags "-X \"main.sha1ver=$(cat .git/$(cat .git/HEAD | sed 's|ref: ||g'))\" -X \"main.buildTime=$(date -Iseconds)\""
 
 FROM alpine:3.15.0
 WORKDIR /oko-server
