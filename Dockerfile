@@ -1,6 +1,6 @@
 FROM alpine:3.15.0 AS build
 
-ARG CAPROVER_GIT_COMMIT_SHA
+ARG CAPROVER_GIT_COMMIT_SHA=""
 VOLUME ["/data"]
 COPY . /oko-server/git
 
