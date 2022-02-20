@@ -1,11 +1,12 @@
 FROM alpine:3.15.0 AS build
 
+ARG CAPROVER_GIT_COMMIT_SHA
 VOLUME ["/data"]
 COPY . /oko-server/git
 
 RUN apk add --no-cache go && \
     cd /oko-server/git && \
-    go build -ldflags "-X \"main.sha1ver=$(cat .git/$(cat .git/HEAD | sed 's|ref: ||g'))\" -X \"main.buildTime=$(date -Iseconds)\""
+    go build -ldflags "-X \"main.sha1ver=${CAPROVER_GIT_COMMIT_SHA:-$(cat .git/$(cat .git/HEAD | sed 's|ref: ||g'))}\" -X \"main.buildTime=$(date -Iseconds)\""
 
 FROM alpine:3.15.0
 WORKDIR /oko-server
