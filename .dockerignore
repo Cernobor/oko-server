@@ -38,3 +38,5 @@ go.work
 oko-server
 *.sqlite*
 .vscode
+data
+local-testing

@@ -1,6 +1,6 @@
 module cernobor.cz/oko-server
 
-go 1.17
+go 1.19
 
 require (
 	crawshaw.io/sqlite v0.3.2
