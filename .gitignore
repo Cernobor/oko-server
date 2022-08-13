@@ -38,3 +38,4 @@ go.work
 oko-server
 *.sqlite*
 .vscode
+__debug_bin

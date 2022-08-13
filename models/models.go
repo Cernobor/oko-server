@@ -60,6 +60,7 @@ type Update struct {
 	Update        []Feature              `json:"update"`
 	Delete        []FeatureID            `json:"delete"`
 	DeletePhotos  []FeaturePhotoID       `json:"delete_photos"`
+	Proposals     []Proposal             `json:"proposals"`
 }
 
 type HandshakeChallenge struct {
@@ -91,4 +92,10 @@ type PhotoMetadata struct {
 	Size                 int64          `json:"size"`
 	ID                   FeaturePhotoID `json:"id"`
 	ThumbnailFilename    string         `json:"thumbnail_filename"`
+}
+
+type Proposal struct {
+	OwnerID     int    `json:"owner_id"`
+	Description string `json:"description"`
+	How         string `json:"how"`
 }

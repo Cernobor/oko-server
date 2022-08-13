@@ -113,7 +113,7 @@ func (s *Server) setupRouter() *gin.Engine {
 }
 
 func (s *Server) handlePOSTReset(gc *gin.Context) {
-	err := s.reinitDB()
+	err := s.initDB(true)
 	if err != nil {
 		internalError(gc, err)
 		return

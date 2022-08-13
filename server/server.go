@@ -22,8 +22,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//go:embed initdb.sql
-var initDB string
+//go:embed sql_schema/V1_init.sql
+var sql_v1 string
+
+//go:embed sql_schema/V2_proposals.sql
+var sql_v2 string
 
 type Server struct {
 	config           ServerConfig
@@ -141,6 +144,7 @@ func (s *Server) checkpointDb(conn *sqlite.Conn, truncate bool) {
 
 func (s *Server) setupDB() {
 	sqlitex.PoolCloseTimeout = time.Second * 10
+	s.log.Debugf("Using db %s", s.config.DbPath)
 	dbpool, err := sqlitex.Open(fmt.Sprintf("file:%s", s.config.DbPath), 0, 10)
 	if err != nil {
 		s.log.WithError(err).Fatal("Failed to open/create DB.")
@@ -148,11 +152,9 @@ func (s *Server) setupDB() {
 	s.dbpool = dbpool
 	s.checkpointNotice = make(chan struct{})
 
-	if s.config.ReinitDB {
-		err = s.reinitDB()
-		if err != nil {
-			s.log.WithError(err).Fatal("init DB transaction failed")
-		}
+	err = s.initDB(s.config.ReinitDB)
+	if err != nil {
+		s.log.WithError(err).Fatal("init DB transaction failed")
 	}
 
 	// aggressively checkpoint the database on idle times
@@ -217,13 +219,62 @@ func (s *Server) setupTiles() {
 	s.mapPackSize = info.Size()
 }
 
-func (s *Server) reinitDB() error {
-	s.log.Info("Reinitializing DB.")
+func (s *Server) initDB(reinit bool) error {
+	s.log.Info("Initializing DB.")
 	conn := s.getDbConn()
 	defer s.dbpool.Put(conn)
 
 	defer s.requestCheckpoint()
-	return sqlitex.ExecScript(conn, initDB)
+
+	if reinit {
+		s.log.Warn("REinitializing DB.")
+		tables := []string{}
+		err := sqlitex.Exec(conn, "select name from sqlite_master where type = 'table'", func(stmt *sqlite.Stmt) error {
+			tables = append(tables, stmt.ColumnText(0))
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get table names: %w", err)
+		}
+
+		for _, table := range tables {
+			err = sqlitex.Exec(conn, "drop table "+table, nil)
+			if err != nil {
+				return fmt.Errorf("failed to drop tables: %w", err)
+			}
+		}
+
+		err = sqlitex.Exec(conn, "PRAGMA user_version = 0", nil)
+		if err != nil {
+			return fmt.Errorf("failed to reset user version: %w", err)
+		}
+	}
+	var version int
+	err := sqlitex.Exec(conn, "PRAGMA user_version", func(stmt *sqlite.Stmt) error {
+		version = stmt.ColumnInt(0)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get user version: %w", err)
+	}
+
+	s.log.Debugf("Current db version: %d", version)
+	if version <= 0 {
+		s.log.Debugf("Running db migration V1")
+		err = sqlitex.ExecScript(conn, sql_v1)
+		if err != nil {
+			return fmt.Errorf("failed to run V1 init script")
+		}
+	}
+	if version <= 1 {
+		s.log.Debugf("Running db migration V2")
+		err = sqlitex.ExecScript(conn, sql_v2)
+		if err != nil {
+			return fmt.Errorf("failed to run V2 init script")
+		}
+	}
+
+	return nil
 }
 
 func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) {
@@ -412,7 +463,7 @@ func (s *Server) getDataWithPhotos() (file *os.File, err error) {
 }
 
 func (s *Server) update(data models.Update, photos map[string]models.Photo) error {
-	s.log.Debugf("Updating data: %d created, %d created photos, %d updated, %d deleted, %d deleted photos, %d photo files", len(data.Create), len(data.CreatedPhotos), len(data.Update), len(data.Delete), len(data.DeletePhotos), len(photos))
+	s.log.Debugf("Updating data: %d created, %d created photos, %d updated, %d deleted, %d deleted photos, %d photo files, %d proposals", len(data.Create), len(data.CreatedPhotos), len(data.Update), len(data.Delete), len(data.DeletePhotos), len(photos), len(data.Proposals))
 	conn := s.getDbConn()
 	defer s.dbpool.Put(conn)
 
@@ -456,6 +507,13 @@ func (s *Server) update(data models.Update, photos map[string]models.Photo) erro
 			err = s.deletePhotos(conn, data.DeletePhotos)
 			if err != nil {
 				err = fmt.Errorf("failed to delete photos: %w", err)
+				return
+			}
+		}
+		if data.Proposals != nil {
+			err = s.addProposals(conn, data.Proposals)
+			if err != nil {
+				err = fmt.Errorf("failed to add proposals: %w", err)
 				return
 			}
 		}
@@ -859,4 +917,34 @@ func (s *Server) getPhoto(featureID models.FeatureID, photoID models.FeaturePhot
 	}
 
 	return data, *contentType, nil
+}
+
+func (s *Server) addProposals(conn *sqlite.Conn, proposals []models.Proposal) error {
+	stmt, err := conn.Prepare("insert into proposals(owner_id, description, how) values(?, ?, ?)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Finalize()
+
+	for _, proposal := range proposals {
+		err := stmt.Reset()
+		if err != nil {
+			return fmt.Errorf("failed to reset prepared statement: %w", err)
+		}
+		err = stmt.ClearBindings()
+		if err != nil {
+			return fmt.Errorf("failed to clear bindings of prepared statement: %w", err)
+		}
+
+		stmt.BindInt64(1, int64(proposal.OwnerID))
+		stmt.BindText(2, proposal.Description)
+		stmt.BindText(3, proposal.How)
+
+		_, err = stmt.Step()
+		if err != nil {
+			return fmt.Errorf("failed to evaluate prepared statement: %w", err)
+		}
+	}
+	s.requestCheckpoint()
+	return nil
 }
