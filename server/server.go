@@ -410,7 +410,7 @@ func (s *Server) getDataWithPhotos() (file *os.File, err error) {
 		return nil, fmt.Errorf("failed to write data zip entry: %w", err)
 	}
 
-	err = sqlitex.Exec(conn, "select id from feature_photos", func(stmt *sqlite.Stmt) error {
+	err = sqlitex.Exec(conn, "select id from feature_photos fp where exists (select 1 from features f where f.id = fp.feature_id)", func(stmt *sqlite.Stmt) error {
 		id := stmt.ColumnInt64(0)
 
 		blob, err := conn.OpenBlob("", "feature_photos", "thumbnail_contents", id, false)
