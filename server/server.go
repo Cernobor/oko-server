@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -48,6 +49,9 @@ type ServerConfig struct {
 	ReinitDB      bool
 	MinZoom       int
 	DefaultCenter models.Coords
+	MaxPhotoX     int
+	MaxPhotoY     int
+	PhotoQuality  int
 }
 
 func New(config ServerConfig) *Server {
@@ -62,6 +66,8 @@ func (s *Server) Run(ctx context.Context) {
 
 	s.ctx = ctx
 	s.setupDB()
+	defer s.cleanupDb()
+
 	s.setupTiles()
 
 	router := s.setupRouter()
@@ -86,6 +92,9 @@ func (s *Server) Run(ctx context.Context) {
 	if err := server.Shutdown(ctx); err != nil {
 		s.log.WithError(err).Fatal("Server forced to shutdown.")
 	}
+}
+
+func (s *Server) cleanupDb() {
 	close(s.checkpointNotice)
 	s.log.Info("Closing db connection pool...")
 	s.dbpool.Close()
@@ -95,6 +104,10 @@ func (s *Server) Run(ctx context.Context) {
 	if err != nil {
 		s.log.WithError(err).Error("Failed to open connection for final checkpoint.")
 		return
+	}
+	err = sqlitex.Exec(conn, "vacuum", nil)
+	if err != nil {
+		s.log.WithError(err).Error("Failed to vacuum db.")
 	}
 	s.checkpointDb(conn, true)
 	conn.Close()
@@ -710,11 +723,22 @@ func (s *Server) addPhotos(conn *sqlite.Conn, createdFeatureMapping, addedFeatur
 				return fmt.Errorf("failed to clear bindings of prepared statement: %w", err)
 			}
 
+			resizedPhoto, err := func() ([]byte, error) {
+				defer photo.File.Close()
+
+				resized, err := resizePhoto(s.config.MaxPhotoX, s.config.MaxPhotoY, s.config.PhotoQuality, photo.File)
+				if err != nil {
+					return nil, err
+				}
+
+				return resized, nil
+			}()
+
 			stmt.BindInt64(1, int64(featureID))
 			stmt.BindText(2, thumbnail.ContentType)
-			stmt.BindText(3, photo.ContentType)
+			stmt.BindText(3, "image/jpeg")
 			stmt.BindZeroBlob(4, thumbnail.Size)
-			stmt.BindZeroBlob(5, photo.Size)
+			stmt.BindZeroBlob(5, int64(len(resizedPhoto)))
 
 			_, err = stmt.Step()
 			if err != nil {
@@ -742,9 +766,8 @@ func (s *Server) addPhotos(conn *sqlite.Conn, createdFeatureMapping, addedFeatur
 			}
 			err = func() error {
 				defer blob.Close()
-				defer photo.File.Close()
 
-				_, err := io.Copy(blob, photo.File)
+				_, err = io.Copy(blob, bytes.NewBuffer(resizedPhoto))
 				return err
 			}()
 			if err != nil {

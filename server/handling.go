@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -257,7 +257,7 @@ func (s *Server) handlePOSTDataMultipart(gc *gin.Context) {
 			internalError(gc, fmt.Errorf("failed to open 'data' 'file': %w", err))
 			return
 		}
-		dataBytes, err := ioutil.ReadAll(df)
+		dataBytes, err := io.ReadAll(df)
 		if err != nil {
 			internalError(gc, fmt.Errorf("failed to open 'data' 'file': %w", err))
 			return

@@ -28,6 +28,9 @@ func main() {
 	minZoomArg := flag.Int("min-zoom", 1, "Minimum zoom that will be sent to clients.")
 	defaultCenterLatArg := flag.Float64("default-center-lat", 0, "Latitude of the default map center.")
 	defaultCenterLngArg := flag.Float64("default-center-lng", 0, "Longitude of the default map center.")
+	maxPhotoXArg := flag.Int("max-photo-width", 0, "Maximum width of photos. 0 means no limit.")
+	maxPhotoYArg := flag.Int("max-photo-height", 0, "Maximum height of photos. 0 means no limit.")
+	photoQualityArg := flag.Int("photo-quality", 90, "Photo JPEG quality.")
 
 	flag.Parse()
 
@@ -40,6 +43,11 @@ func main() {
 	t, err := time.Parse(time.RFC3339, buildTime)
 	if err != nil {
 		t = time.Now()
+	}
+
+	if *maxPhotoXArg < 0 || *maxPhotoYArg < 0 {
+		fmt.Fprintln(os.Stderr, "Max photo width and height cannot be less than 0.")
+		os.Exit(1)
 	}
 
 	s := server.New(server.ServerConfig{
@@ -55,6 +63,9 @@ func main() {
 			Lat: *defaultCenterLatArg,
 			Lng: *defaultCenterLngArg,
 		},
+		MaxPhotoX:    *maxPhotoXArg,
+		MaxPhotoY:    *maxPhotoYArg,
+		PhotoQuality: *photoQualityArg,
 	})
 
 	sigs := make(chan os.Signal, 1)
