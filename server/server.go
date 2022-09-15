@@ -971,3 +971,24 @@ func (s *Server) addProposals(conn *sqlite.Conn, proposals []models.Proposal) er
 	s.requestCheckpoint()
 	return nil
 }
+
+func (s *Server) getProposals(conn *sqlite.Conn) ([]models.Proposal, error) {
+	if conn == nil {
+		conn = s.getDbConn()
+		defer s.dbpool.Put(conn)
+	}
+
+	proposals := make([]models.Proposal, 0, 100)
+	err := sqlitex.Exec(conn, "select owner_id, description, how from proposals", func(stmt *sqlite.Stmt) error {
+		proposals = append(proposals, models.Proposal{
+			OwnerID:     models.UserID(stmt.ColumnInt(0)),
+			Description: stmt.ColumnText(1),
+			How:         stmt.ColumnText(2),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get proposals from db: %w", err)
+	}
+	return proposals, nil
+}

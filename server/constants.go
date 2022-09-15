@@ -12,6 +12,7 @@ const (
 	URIDataPeople        = "/data/people"
 	URIDataFeatures      = "/data/features"
 	URIDataFeaturesPhoto = "/data/features/:feature/photos/:photo"
+	URIDataProposals     = "/data/proposals"
 	URITileserverRoot    = "/tileserver"
 	URITileserver        = URITileserverRoot + "/*x"
 	URITileTemplate      = URITileserverRoot + "/map/tiles/{z}/{x}/{y}.pbf"

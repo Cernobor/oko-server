@@ -95,7 +95,7 @@ type PhotoMetadata struct {
 }
 
 type Proposal struct {
-	OwnerID     int    `json:"owner_id"`
+	OwnerID     UserID `json:"owner_id"`
 	Description string `json:"description"`
 	How         string `json:"how"`
 }

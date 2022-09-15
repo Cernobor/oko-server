@@ -105,6 +105,7 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.GET(URIDataPeople, s.handleGETDataPeople)
 	router.GET(URIDataFeatures, s.handleGETDataFeatures)
 	router.GET(URIDataFeaturesPhoto, s.handleGETDataFeaturesPhoto)
+	router.GET(URIDataProposals, s.handleGETDataProposals)
 
 	// tileserver
 	router.GET(URITileserver, gin.WrapH(s.tileserverSvSet.Handler()))
@@ -353,4 +354,13 @@ func (s *Server) handleGETDataFeaturesPhoto(gc *gin.Context) {
 	}
 
 	gc.Data(http.StatusOK, contentType, photoBytes)
+}
+
+func (s *Server) handleGETDataProposals(gc *gin.Context) {
+	proposals, err := s.getProposals(nil)
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	gc.JSON(http.StatusOK, proposals)
 }
