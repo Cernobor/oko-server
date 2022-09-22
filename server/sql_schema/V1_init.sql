@@ -21,5 +21,3 @@ CREATE TABLE feature_photos (
   thumbnail_contents blob NOT NULL,
   contents blob NOT NULL
 );
-
-PRAGMA user_version = 1;

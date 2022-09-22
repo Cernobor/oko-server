@@ -13,15 +13,7 @@ import (
 	"cernobor.cz/oko-server/models"
 )
 
-func ptrInt(x int) *int {
-	return &x
-}
-
-func ptrInt64(x int64) *int64 {
-	return &x
-}
-
-func ptrString(x string) *string {
+func ptr[T any](x T) *T {
 	return &x
 }
 

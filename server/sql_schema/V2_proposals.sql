@@ -3,5 +3,3 @@ CREATE TABLE proposals (
   description text NOT NULL,
   how text NOT NULL
 );
-
-PRAGMA user_version = 2;
