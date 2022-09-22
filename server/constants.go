@@ -5,6 +5,7 @@ const (
 	URIBuildInfo         = "/build-info"
 	URIHardFail          = "/hard-fail"
 	URISoftFail          = "/soft-fail"
+	URIAppVersions       = "/app-versions"
 	URIReinit            = "/reinit"
 	URIMapPack           = "/mappack"
 	URIHandshake         = "/handshake"
@@ -16,4 +17,6 @@ const (
 	URITileserverRoot    = "/tileserver"
 	URITileserver        = URITileserverRoot + "/*x"
 	URITileTemplate      = URITileserverRoot + "/map/tiles/{z}/{x}/{y}.pbf"
+
+	AppName = "OKO"
 )

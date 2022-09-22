@@ -4,6 +4,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	geojson "github.com/paulmach/go.geojson"
 )
 
@@ -39,6 +40,11 @@ type BuildInfo struct {
 }
 
 // transport objects
+
+type AppVersionInfo struct {
+	Version semver.Version `json:"version"`
+	Address string         `json:"address"`
+}
 
 type Coords struct {
 	Lat float64 `json:"lat"`

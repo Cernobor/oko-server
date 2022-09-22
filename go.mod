@@ -4,14 +4,15 @@ go 1.19
 
 require (
 	crawshaw.io/sqlite v0.3.2
-	github.com/consbio/mbtileserver v0.8.1
+	github.com/consbio/mbtileserver v0.8.2
 	github.com/gin-gonic/gin v1.7.7
 	github.com/paulmach/go.geojson v1.4.0
 	github.com/sirupsen/logrus v1.8.1
 )
 
 require (
-	github.com/brendan-ward/mbtiles-go v0.0.0-20211210015813-553bc514bbdf // indirect
+	github.com/brendan-ward/mbtiles-go v0.1.1-0.20220129145719-67a7dabdbaab // indirect
+	github.com/coreos/go-semver v0.3.0
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
@@ -22,6 +23,7 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/mssola/user_agent v0.5.3
 	github.com/ugorji/go/codec v1.2.6 // indirect
 	golang.org/x/crypto v0.0.0-20220112180741-5e0467b6c7ce // indirect
 	golang.org/x/image v0.0.0-20220722155232-062f8c9fd539

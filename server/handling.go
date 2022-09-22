@@ -13,12 +13,20 @@ import (
 
 	"cernobor.cz/oko-server/errs"
 	"cernobor.cz/oko-server/models"
+	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
+	"github.com/mssola/user_agent"
 	"github.com/sirupsen/logrus"
 )
 
 func internalError(gc *gin.Context, err error) {
+	gc.Error(err)
 	gc.String(http.StatusInternalServerError, "%v", err)
+}
+
+func badRequest(gc *gin.Context, err error) {
+	gc.Error(err)
+	gc.String(http.StatusBadRequest, "%v", err)
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -77,10 +85,23 @@ func (s *Server) setupRouter() *gin.Engine {
 		}
 	})
 
+	// tileserver
+	router.GET(URITileserver, gin.WrapH(s.tileserverSvSet.Handler()))
+
+	/*** API ***/
+	router.GET(URIPing, s.handleGETPing)
+	router.POST(URIHandshake, s.handlePOSTHandshake)
+	router.GET(URIData, s.handleGETData)
+	router.POST(URIData, s.handlePOSTData)
+	router.GET(URIDataPeople, s.handleGETDataPeople)
+	router.GET(URIDataFeatures, s.handleGETDataFeatures)
+	router.GET(URIDataFeaturesPhoto, s.handleGETDataFeaturesPhoto)
+	router.GET(URIDataProposals, s.handleGETDataProposals)
+
+	// resources
+	router.GET(URIMapPack, s.handleGETTilepack)
+
 	// utility/debug paths
-	router.GET(URIPing, func(gc *gin.Context) {
-		gc.Status(http.StatusNoContent)
-	})
 	router.GET(URIBuildInfo, func(gc *gin.Context) {
 		gc.JSON(http.StatusOK, models.BuildInfo{
 			VersionHash: s.config.VersionHash,
@@ -93,24 +114,70 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.GET(URISoftFail, func(gc *gin.Context) {
 		gc.JSON(http.StatusOK, map[string]string{"error": "artificial fail"})
 	})
+	router.GET(URIAppVersions, s.handleGETAppVersions)
+	router.POST(URIAppVersions, s.handlePOSTAppVersions)
 	router.POST(URIReinit, s.handlePOSTReset)
 
-	// resources
-	router.GET(URIMapPack, s.handleGETTilepack)
-
-	// API
-	router.POST(URIHandshake, s.handlePOSTHandshake)
-	router.GET(URIData, s.handleGETData)
-	router.POST(URIData, s.handlePOSTData)
-	router.GET(URIDataPeople, s.handleGETDataPeople)
-	router.GET(URIDataFeatures, s.handleGETDataFeatures)
-	router.GET(URIDataFeaturesPhoto, s.handleGETDataFeaturesPhoto)
-	router.GET(URIDataProposals, s.handleGETDataProposals)
-
-	// tileserver
-	router.GET(URITileserver, gin.WrapH(s.tileserverSvSet.Handler()))
-
 	return router
+}
+
+func extractAppVersion(gc *gin.Context) (*semver.Version, error) {
+	ua := user_agent.New(gc.Request.UserAgent())
+	n, v := ua.Browser()
+	if n != AppName {
+		return nil, nil
+	}
+
+	version, err := semver.NewVersion(v)
+	if err != nil {
+		return nil, fmt.Errorf("malformed version in User-Agent header: %w", err)
+	}
+	return version, nil
+}
+
+func (s *Server) handleGETPing(gc *gin.Context) {
+	version, err := extractAppVersion(gc)
+	if err != nil {
+		badRequest(gc, err)
+		return
+	}
+
+	res, err := s.getLatestVersion(version)
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+
+	if res == nil {
+		gc.Status(http.StatusNoContent)
+	} else {
+		gc.JSON(http.StatusOK, res)
+	}
+}
+
+func (s *Server) handleGETAppVersions(gc *gin.Context) {
+	versions, err := s.getAppVersions()
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	gc.JSON(http.StatusOK, versions)
+}
+
+func (s *Server) handlePOSTAppVersions(gc *gin.Context) {
+	var versionInfo models.AppVersionInfo
+	err := gc.ShouldBindJSON(&versionInfo)
+	if err != nil {
+		badRequest(gc, fmt.Errorf("malformed version info: %w", err))
+		return
+	}
+
+	err = s.putAppVersion(&versionInfo)
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	gc.Status(http.StatusNoContent)
 }
 
 func (s *Server) handlePOSTReset(gc *gin.Context) {
@@ -130,7 +197,7 @@ func (s *Server) handlePOSTHandshake(gc *gin.Context) {
 	var hs models.HandshakeChallenge
 	err := gc.ShouldBindJSON(&hs)
 	if err != nil {
-		gc.String(http.StatusBadRequest, fmt.Sprintf("malformed handshake challenge: %v", err))
+		badRequest(gc, fmt.Errorf("malformed handshake challenge: %w", err))
 		return
 	}
 
@@ -205,7 +272,7 @@ func (s *Server) handlePOSTData(gc *gin.Context) {
 	case "multipart/form-data":
 		s.handlePOSTDataMultipart(gc)
 	default:
-		gc.String(http.StatusBadRequest, "unsupported Content-Type")
+		badRequest(gc, fmt.Errorf("unsupported Content-Type"))
 	}
 }
 
@@ -213,17 +280,17 @@ func (s *Server) handlePOSTDataJSON(gc *gin.Context) {
 	var data models.Update
 	err := gc.ShouldBindJSON(&data)
 	if err != nil {
-		gc.String(http.StatusBadRequest, fmt.Sprintf("malformed data: %v", err))
+		badRequest(gc, fmt.Errorf("malformed data: %w", err))
 		return
 	}
 
 	if !isUniqueFeatureID(data.Create) {
-		gc.String(http.StatusBadRequest, "created features do not have unique IDs")
+		badRequest(gc, fmt.Errorf("created features do not have unique IDs"))
 		return
 	}
 
 	if data.CreatedPhotos != nil || data.AddPhotos != nil {
-		gc.String(http.StatusBadRequest, "created_photos and/or add_photos present, but Content-Type is application/json")
+		badRequest(gc, fmt.Errorf("created_photos and/or add_photos present, but Content-Type is application/json"))
 		return
 	}
 
@@ -238,7 +305,7 @@ func (s *Server) handlePOSTDataJSON(gc *gin.Context) {
 func (s *Server) handlePOSTDataMultipart(gc *gin.Context) {
 	form, err := gc.MultipartForm()
 	if err != nil {
-		gc.String(http.StatusBadRequest, "malformed multipart/form-data content")
+		badRequest(gc, fmt.Errorf("malformed multipart/form-data content"))
 		return
 	}
 
@@ -246,11 +313,11 @@ func (s *Server) handlePOSTDataMultipart(gc *gin.Context) {
 	if !ok {
 		dataFile, ok := form.File["data"]
 		if !ok {
-			gc.String(http.StatusBadRequest, "value 'data' is missing from the content")
+			badRequest(gc, fmt.Errorf("value 'data' is missing from the content"))
 			return
 		}
 		if len(dataFile) != 1 {
-			gc.String(http.StatusBadRequest, "value 'data' does not contain exactly 1 item")
+			badRequest(gc, fmt.Errorf("value 'data' does not contain exactly 1 item"))
 			return
 		}
 		df, err := dataFile[0].Open()
@@ -266,26 +333,26 @@ func (s *Server) handlePOSTDataMultipart(gc *gin.Context) {
 		dataStr = []string{string(dataBytes)}
 	}
 	if len(dataStr) != 1 {
-		gc.String(http.StatusBadRequest, "value 'data' does not contain exactly 1 item")
+		badRequest(gc, fmt.Errorf("value 'data' does not contain exactly 1 item"))
 		return
 	}
 
 	var data models.Update
 	err = json.Unmarshal([]byte(dataStr[0]), &data)
 	if err != nil {
-		gc.String(http.StatusBadRequest, "malformed 'data' value: %v", err)
+		badRequest(gc, fmt.Errorf("malformed 'data' value: %w", err))
 		return
 	}
 
 	if !isUniqueFeatureID(data.Create) {
-		gc.String(http.StatusBadRequest, "created features do not have unique IDs")
+		badRequest(gc, fmt.Errorf("created features do not have unique IDs"))
 		return
 	}
 
 	photos := make(map[string]models.Photo, len(form.File))
 	for name, fh := range form.File {
 		if len(fh) != 1 {
-			gc.String(http.StatusBadRequest, "file item %s does not contain exactly 1 file", name)
+			badRequest(gc, fmt.Errorf("file item %s does not contain exactly 1 file", name))
 			return
 		}
 		var photo models.Photo
@@ -303,7 +370,7 @@ func (s *Server) handlePOSTDataMultipart(gc *gin.Context) {
 	if err != nil {
 		var e *errs.ErrUnsupportedContentType
 		if errors.As(err, &e) {
-			gc.String(http.StatusBadRequest, e.Error())
+			badRequest(gc, e)
 			return
 		}
 		internalError(gc, fmt.Errorf("failed to update data: %w", err))
@@ -334,12 +401,12 @@ func (s *Server) handleGETDataFeatures(gc *gin.Context) {
 func (s *Server) handleGETDataFeaturesPhoto(gc *gin.Context) {
 	reqFeatureID, err := strconv.Atoi(gc.Param("feature"))
 	if err != nil {
-		gc.String(http.StatusBadRequest, "malformed feature ID")
+		badRequest(gc, fmt.Errorf("malformed feature ID"))
 		return
 	}
 	reqPhotoID, err := strconv.Atoi(gc.Param("photo"))
 	if err != nil {
-		gc.String(http.StatusBadRequest, "malformed photo ID")
+		badRequest(gc, fmt.Errorf("malformed photo ID"))
 		return
 	}
 

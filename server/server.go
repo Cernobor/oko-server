@@ -11,6 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
+	"regexp"
+	"sort"
+	"strconv"
 	"time"
 
 	"cernobor.cz/oko-server/errs"
@@ -18,6 +22,7 @@ import (
 	"crawshaw.io/sqlite"
 	"crawshaw.io/sqlite/sqlitex"
 	mbsh "github.com/consbio/mbtileserver/handlers"
+	"github.com/coreos/go-semver/semver"
 	geojson "github.com/paulmach/go.geojson"
 	"github.com/sirupsen/logrus"
 )
@@ -346,9 +351,9 @@ func (s *Server) migrateDb(conn *sqlite.Conn) error {
 			}
 
 			err = sqlitex.Exec(conn, fmt.Sprintf("PRAGMA user_version = %d", migration.version), nil)
-		if err != nil {
+			if err != nil {
 				return fmt.Errorf("failed to set user_version in db: %w", err)
-		}
+			}
 
 			err = sqlitex.Exec(conn, "PRAGMA user_version", func(stmt *sqlite.Stmt) error {
 				version = stmt.ColumnInt(0)
@@ -356,7 +361,7 @@ func (s *Server) migrateDb(conn *sqlite.Conn) error {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to get user_version: %w", err)
-	}
+			}
 
 			s.log.Infof("Migrated db to version: %d", version)
 			return nil
@@ -366,6 +371,61 @@ func (s *Server) migrateDb(conn *sqlite.Conn) error {
 		}
 	}
 	return nil
+}
+
+func (s *Server) getLatestVersion(v *semver.Version) (*models.AppVersionInfo, error) {
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+
+	var latest *models.AppVersionInfo
+	versions, err := s.getAppVersions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve app versions from db: %w", err)
+	}
+
+	for _, ver := range versions {
+		if (v == nil || v.LessThan(ver.Version)) && (latest == nil || latest.Version.LessThan(ver.Version)) {
+			latest = ver
+		}
+	}
+
+	return latest, nil
+}
+
+func (s *Server) getAppVersions() ([]*models.AppVersionInfo, error) {
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+
+	versions := []*models.AppVersionInfo{}
+	err := sqlitex.Exec(conn, "select version, address from app_versions", func(stmt *sqlite.Stmt) error {
+		verStr := stmt.ColumnText(0)
+		addr := stmt.ColumnText(1)
+
+		ver, err := semver.NewVersion(verStr)
+		if err != nil {
+			return fmt.Errorf("failed to parse version: %w", err)
+		}
+
+		versions = append(versions, &models.AppVersionInfo{
+			Version: *ver,
+			Address: addr,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert/retrieve user from db: %w", err)
+	}
+
+	return versions, nil
+}
+
+func (s *Server) putAppVersion(versionInfo *models.AppVersionInfo) error {
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+
+	err := sqlitex.Exec(conn, "insert into app_versions(version, address) values(?, ?) on conflict(version) do update set address = excluded.address", nil, versionInfo.Version.String(), versionInfo.Address)
+	if err != nil {
+		return fmt.Errorf("failed to insert app version into db: %w", err)
 	}
 
 	return nil
