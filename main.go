@@ -31,6 +31,7 @@ func main() {
 	maxPhotoXArg := flag.Int("max-photo-width", 0, "Maximum width of photos. 0 means no limit.")
 	maxPhotoYArg := flag.Int("max-photo-height", 0, "Maximum height of photos. 0 means no limit.")
 	photoQualityArg := flag.Int("photo-quality", 90, "Photo JPEG quality.")
+	debug := flag.Bool("debug", false, "If specified, logging level will be set to debug instead of info.")
 
 	flag.Parse()
 
@@ -66,6 +67,7 @@ func main() {
 		MaxPhotoX:    *maxPhotoXArg,
 		MaxPhotoY:    *maxPhotoYArg,
 		PhotoQuality: *photoQualityArg,
+		Debug:        *debug,
 	})
 
 	sigs := make(chan os.Signal, 1)

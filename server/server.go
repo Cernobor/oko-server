@@ -53,6 +53,7 @@ type ServerConfig struct {
 	MaxPhotoX     int
 	MaxPhotoY     int
 	PhotoQuality  int
+	Debug         bool
 }
 
 func New(config ServerConfig) *Server {
@@ -63,7 +64,9 @@ func New(config ServerConfig) *Server {
 
 func (s *Server) Run(ctx context.Context) {
 	s.log = logrus.New()
-	s.log.SetLevel(logrus.DebugLevel)
+	if s.config.Debug {
+		s.log.SetLevel(logrus.DebugLevel)
+	}
 
 	s.ctx = ctx
 	s.setupDB()

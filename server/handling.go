@@ -35,7 +35,6 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.Use(gin.Recovery())
 
 	// logging
-	ginLogger := logrus.New()
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
@@ -54,7 +53,7 @@ func (s *Server) setupRouter() *gin.Engine {
 		if dataLength < 0 {
 			dataLength = 0
 		}
-		entry := ginLogger.WithFields(logrus.Fields{
+		entry := s.log.WithFields(logrus.Fields{
 			"hostname":   hostname,
 			"statusCode": statusCode,
 			"latency":    latency,
