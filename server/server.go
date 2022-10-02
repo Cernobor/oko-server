@@ -434,6 +434,44 @@ func (s *Server) putAppVersion(versionInfo *models.AppVersionInfo) error {
 	return nil
 }
 
+func (s *Server) getAppVersion(version string) (*models.AppVersionInfo, error) {
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+
+	var v *models.AppVersionInfo
+	err := sqlitex.Exec(conn, "select version, address from app_versions where version = ?", func(stmt *sqlite.Stmt) error {
+		verStr := stmt.ColumnText(0)
+		ver, err := semver.NewVersion(verStr)
+		if err != nil {
+			return fmt.Errorf("failed to parse version string %s from db: %w", verStr, err)
+		}
+		addr := stmt.ColumnText(1)
+		v = &models.AppVersionInfo{
+			Version: *ver,
+			Address: addr,
+		}
+		return nil
+	}, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve app version %s from db: %w", version, err)
+	}
+
+	return v, nil
+}
+
+func (s *Server) deleteAppVersion(version string) (bool, error) {
+	conn := s.getDbConn()
+	defer s.dbpool.Put(conn)
+
+	err := sqlitex.Exec(conn, "delete from app_versions where version = ?", nil, version)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete app version %s from db: %w", version, err)
+	}
+	n := conn.Changes()
+
+	return n > 0, nil
+}
+
 func (s *Server) handshake(hc models.HandshakeChallenge) (models.UserID, error) {
 	conn := s.getDbConn()
 	defer s.dbpool.Put(conn)

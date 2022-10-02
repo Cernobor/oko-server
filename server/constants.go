@@ -6,6 +6,7 @@ const (
 	URIHardFail          = "/hard-fail"
 	URISoftFail          = "/soft-fail"
 	URIAppVersions       = "/app-versions"
+	URIAppVersion        = "/app-versions/:version"
 	URIReinit            = "/reinit"
 	URIMapPack           = "/mappack"
 	URIHandshake         = "/handshake"

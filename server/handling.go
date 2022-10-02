@@ -115,6 +115,8 @@ func (s *Server) setupRouter() *gin.Engine {
 	})
 	router.GET(URIAppVersions, s.handleGETAppVersions)
 	router.POST(URIAppVersions, s.handlePOSTAppVersions)
+	router.GET(URIAppVersion, s.handleGETAppVersion)
+	router.DELETE(URIAppVersion, s.handleDELETEAppVersion)
 	router.POST(URIReinit, s.handlePOSTReset)
 
 	return router
@@ -174,6 +176,44 @@ func (s *Server) handlePOSTAppVersions(gc *gin.Context) {
 	err = s.putAppVersion(&versionInfo)
 	if err != nil {
 		internalError(gc, err)
+		return
+	}
+	gc.Status(http.StatusNoContent)
+}
+
+func (s *Server) handleGETAppVersion(gc *gin.Context) {
+	version := gc.Param("version")
+	if version == "" {
+		badRequest(gc, fmt.Errorf("version not provided"))
+		return
+	}
+
+	ver, err := s.getAppVersion(version)
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	if ver == nil {
+		gc.Status(http.StatusNotFound)
+		return
+	}
+	gc.JSON(http.StatusOK, ver)
+}
+
+func (s *Server) handleDELETEAppVersion(gc *gin.Context) {
+	version := gc.Param("version")
+	if version == "" {
+		badRequest(gc, fmt.Errorf("version not provided"))
+		return
+	}
+
+	deleted, err := s.deleteAppVersion(version)
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	if !deleted {
+		gc.Status(http.StatusNotFound)
 		return
 	}
 	gc.Status(http.StatusNoContent)
