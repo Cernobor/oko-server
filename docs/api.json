@@ -1,0 +1,602 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "OKO server API",
+        "version": "1.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8080/",
+            "description": "Local testing."
+        }
+    ],
+    "components": {
+        "securitySchemes": {},
+        "schemas": {
+            "Error": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "AppVersionInfo": {
+                "type": "object",
+                "properties": {
+                    "address": {
+                        "type": "string",
+                        "description": "URL from which the app of this version can be downloaded."
+                    },
+                    "version": {
+                        "type": "string",
+                        "description": "Version of the app in the format 'major.minor.patch[-prerelease][+metadata]' (without quotes)."
+                    }
+                },
+                "required": ["address", "version"],
+                "description": "Info about an available app."
+            },
+            "HandshakeChallenge": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the user."
+                    },
+                    "exists": {
+                        "type": "boolean",
+                        "description": "Indicates to the server whether this user is supposed to already exist and therefore should only bind to this existing user."
+                    }
+                },
+                "required": ["name"],
+                "description": "Data for handshake initiation."
+            },
+            "HandshakeResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "User ID assigned by the server."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the user as requested by the client."
+                    },
+                    "map_info": {
+                        "type": "object",
+                        "properties": {
+                            "map_pack_path": {
+                                "type": "string",
+                                "description": "URL path to the map pack."
+                            },
+                            "map_pack_size": {
+                                "type": "integer",
+                                "description": "Size of the map pack in bytes."
+                            },
+                            "tile_path_template": {
+                                "type": "string",
+                                "description": "Template of the URL path to the map tiles."
+                            },
+                            "min_zoom": {
+                                "type": "integer",
+                                "description": "Minimum zoom supported by the server/map pack."
+                            },
+                            "default_center": {
+                                "$ref": "#/components/schemas/Coords"
+                            }
+                        },
+                        "required": ["map_pack_path", "map_pack_size", "tile_path_template", "min_zoom", "default_center"],
+                        "description": "Info about map settings."
+                    }
+                },
+                "required": ["id", "name", "map_info"],
+                "description": "Response to successful handshake. Tells the client how to set itself up."
+            },
+            "Coords": {
+                "type": "object",
+                "properties": {
+                    "lat": {
+                        "type": "number",
+                        "description": "Latitude (north-south coordinate). Positive number indicates north, negative south."
+                    },
+                    "lng": {
+                        "type": "number",
+                        "description": "Longitude (east-west coordinate). Positive number indicates east, negative west."
+                    }
+                },
+                "required": ["lat", "lng"],
+                "description": "WGS84 coordinates - latitude and longitude."
+            },
+            "User": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "User ID."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "User name."
+                    }
+                },
+                "required": ["id", "name"],
+                "description": "A user in the system."
+            },
+            "Feature": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "ID of the feature."
+                    },
+                    "owner_id": {
+                        "type": "integer",
+                        "description": "ID of the user owning this feature."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the feature."
+                    },
+                    "deadline": {
+                        "allOf": [{"$ref": "#/components/schemas/LocalDateTime"}],
+                        "description": "Time at which the feature should be deleted."
+                    },
+                    "properties": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Any extra data associated with the feature."
+                    },
+                    "geometry": {
+                        "allOf": [{"$ref": "https://geojson.org/schema/Geometry.json"}],
+                        "description": "Geometry describing this feature."
+                    },
+                    "photo_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "IDs of photos associated with this feature."
+                    }
+                },
+                "required": ["id", "owner_id", "name", "geometry"]
+            },
+            "PhotoMetadata": {
+                "type": "object",
+                "properties": {
+                    "content_type": {
+                        "type": "string",
+                        "description": "MIME type of the file containing the photo."
+                    },
+                    "thumbnail_content_type": {
+                        "type": "string",
+                        "description": "MIME type of the file containing the thumbnail of the photo."
+                    },
+                    "size": {
+                        "type": "integer",
+                        "description": "Size of the file containing the photo in bytes."
+                    },
+                    "id": {
+                        "type": "integer",
+                        "description": "ID of the photo."
+                    },
+                    "thumbnail_filename": {
+                        "type": "string",
+                        "description": "Name of the file containing the thumbnail of the photo."
+                    }
+                },
+                "required": ["content_type", "thumbnail_content_type", "size", "id", "thumbnail_filename"],
+                "description": "Metadata about a photo."
+            },
+            "Proposal": {
+                "type": "object",
+                "properties": {
+                    "owner_id": {
+                        "type": "integer",
+                        "description": "ID of the owner (author) of the proposal."
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Description of what should the system do better/different/what it does not do now."
+                    },
+                    "how": {
+                        "type": "string",
+                        "description": "How should the system behave to meet this demand."
+                    }
+                },
+                "required": ["owner_id", "description", "how"],
+                "description": "A proposal for improvement of the system."
+            },
+            "Data": {
+                "type": "object",
+                "properties": {
+                    "users": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/User"
+                        },
+                        "description": "Users present in the system."
+                    },
+                    "features": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Feature"
+                        },
+                        "description": "Features present in the system."
+                    },
+                    "photo_metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/PhotoMetadata"
+                        },
+                        "description": "Mapping from photo ID to metadata describing that photo."
+                    }
+                },
+                "required": ["users", "features"],
+                "description": "Data about users and features."
+            },
+            "Update": {
+                "type": "object",
+                "properties": {
+                    "create": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Feature"
+                        },
+                        "description": "Newly created features. The IDs of these features are considered 'local' to this set of features and must be unique among them."
+                    },
+                    "created_photos": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "description": "Mapping from ID of a feature defined in 'created' to a multipart/form-data filed name of a photo associated with that feature."
+                    },
+                    "add_photos": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "description": "Mapping from ID of an already existing feature to a multipart/form-data filed name of a photo that is to be added to that feature."
+                    },
+                    "update": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Feature"
+                        },
+                        "description": "Features to be updated. They are matched by their ID."
+                    },
+                    "delete": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "IDs of features that are to be deleted."
+                    },
+                    "delete_photos": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "IDs of photos that are to be deleted."
+                    },
+                    "proposals": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Proposal"
+                        },
+                        "description": "New proposals for improvement of the system."
+                    }
+                },
+                "description": "Data update to server."
+            },
+            "LocalDateTime": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2020-05-13T17:26:57.719+02:00"
+            }
+        }
+    },
+    "security": [],
+    "paths": {
+        "/ping" : {
+            "get": {
+                "operationId": "ping",
+                "summary": "Checks the server liveness and provides info about (newer) app versions.",
+                "responses": {
+                    "200": {
+                        "description": "Server is alive, and there is a newer version of the app available. The response contains the app info.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AppVersionInfo"
+                                }
+                            }
+                        }
+                    },
+                    "204": {
+                        "description": "Server is alive, and there is no newer version of the app."
+                    },
+                    "400": {
+                        "description": "App version info in User-Agent header is malformed."
+                    }
+                }
+            }
+        },
+        "/handshake": {
+            "post": {
+                "operationId": "handshake",
+                "summary": "Performs pairing of the client with the server.",
+                "requestBody": {
+                    "required": true,
+                    "description": "Handshake challenge.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/HandshakeChallenge"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Handshake successful, response body contains the handshake response.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HandshakeResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed handshake challenge."
+                    },
+                    "403": {
+                        "description": "Attempted to associate ('exists' was set to true) with a reserved (system) user."
+                    },
+                    "404": {
+                        "description": "Attempted to associate ('exists' was set to true) with a non-existing user."
+                    },
+                    "409": {
+                        "description": "Attempted to create ('exists' was not set or set to false) an already existing user."
+                    }
+                }
+            }
+        },
+        "/data": {
+            "get": {
+                "operationId": "getData",
+                "summary": "Retrieves the data about users and features from the server.",
+                "responses": {
+                    "200": {
+                        "description": "The data, either by themselves (application/json), or with the photos associated with the features (application/zip). Determined by the Accept header.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Data"
+                                }
+                            },
+                            "application/zip": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary",
+                                    "description": "A zip-file containing all the data. In the zip file, there is a file data.json, which contains the feature data in the same format as for the applicaion/json response. The photos are stored in sibling files with name patterns img{id} and thumb_img{id} for the photo and its thumbnail respectively, where {id} is the ID of the photo corresponding to the photo IDs described in the feature data."
+                                }
+                            }
+                        }
+                    },
+                    "406": {
+                        "description": "Unsupported Accept header value."
+                    }
+                }
+            },
+            "post": {
+                "operationId": "postData",
+                "summary": "Uploads new data to the server.",
+                "description": "The update process goes through these steps:\n\n  1. all created features (if any) are added to the system\n  2. new photos (if any) for both the new and existing features are saved\n  3. the features that should be updated (if any) are updated \n  4. the features to be deleted (if any) are deleted\n  5. the photos to be deleted (if any) are deleted\n  6. the proposals (if any) are saved\n\nThe whole upload process is atomic, i.e. it either succeedes or fails, and does not interfere with other users doing the same (this, or their requests may fail e.g. due to a deleted feature that is referenced in a request that is serialized after).",
+                "requestBody": {
+                    "required": true,
+                    "description": "Data to be uploaded.\n\nIf Content-Type is application/json, the data is expected directly in the request body.\n\nIf Content-Type is multipart/form-data, a zip-file is expcected containing both the data, and the other binary files (photos) associated with the data.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Update"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "data": {
+                                        "oneOf": [
+                                            {
+                                                "type": "string",
+                                                "description": "Update data stored in the string, interpreted in the same way as the request body would be, if the Content-Type was application/json."
+                                            },
+                                            {
+                                                "type": "string",
+                                                "format": "binary",
+                                                "description": "A file containing the update data which will be interpreted in the same way as the request body would be, if the Content-Type was application/json."
+                                            }
+                                        ]
+                                    }
+                                },
+                                "additionalProperties": {
+                                    "type": "string",
+                                    "format": "binary",
+                                    "description": "A photo that is to be added to a feature (new or existing). Is referenced from the 'data' via 'created_photos' and 'add_photos'."
+                                },
+                                "required": ["data"]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "Update has been performed successfully."
+                    },
+                    "400": {
+                        "description": "There has been some problem with the request. Possible reasons are:\n\n  * unsupported Content-Type of the request (i.e. other than application/json or multipart/form-data),\n  * malformed JSON data, either directly in request body (when Content-Type is application/json), or in the 'data' field (when Content-Type is multipart/form-data),\n  * malformed multipart/form-data request body,\n  * IDs of created features are not unique,\n  * 'created_photos' and/or 'add_photos' have been specified but the Content-Type is application/json,\n  * the 'data' field is missing in the request body (when Content-Type is multipart/form-data),\n  * the 'data' field contains more than 1 item (when Content-Type is multipart/form-data),\n  * other fields (that are supposed to contain 1 photo each) contain more than 1 item (when Content-Type is multipart/form-data),\n  * unsupported Content-Type of a photo (when request Content-Type is multipart/form-data).\n\nThe response body contains the error description in plain text.",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                },
+                                "examples": {
+                                    "malformed request body (application/json)": {
+                                        "value": "malfomred data: <description of error>"
+                                    },
+                                    "malformed request body (multipart/form-data)": {
+                                        "value": "malfomred multipart/form-data content"
+                                    },
+                                    "photos specified (application/json)": {
+                                        "value": "created_photos and/or add_photos present, but Content-Type is application/json"
+                                    },
+                                    "no 'data' field (multipart/form-data)": {
+                                        "value": "value 'data' is missing from the content"
+                                    },
+                                    "multiple items for 'data' field (multipart/form-data)": {
+                                        "value": "value 'data' does not contain exactly 1 item"
+                                    },
+                                    "malformed 'data' (multipart/form-data)": {
+                                        "value": "malformed 'data' value: <description of error>"
+                                    },
+                                    "non-unique created feature IDs (both)": {
+                                        "value": "created features do not have unique IDs"
+                                    },
+                                    "multiple items for another field than 'data' (multipart/form-data)": {
+                                        "value": "file item <name of field> does not contain exactly 1 file"
+                                    },
+                                    "unsupported photo Content-Type (multipart/form-data)": {
+                                        "value": "photo <name of field> has an unsupported Content-Type"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/data/people": {
+            "get": {
+                "operationId": "getPeople",
+                "summary": "Lists the users present in the system.",
+                "responses": {
+                    "200": {
+                        "description": "List of users present in the system.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/User"
+                                    },
+                                    "description": "List of users."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/data/features": {
+            "get": {
+                "operationId": "getFeatures",
+                "summary": "Lists the features present in the system.",
+                "responses": {
+                    "200": {
+                        "description": "List of features present in the system.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Feature"
+                                    },
+                                    "description": "List of features."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/data/features/{featureID}/photos/{photoID}": {
+            "parameters": [
+                {
+                    "in": "path",
+                    "name": "featureID",
+                    "schema": {
+                        "type": "integer"
+                    },
+                    "required": true,
+                    "description": "ID of a feature."
+                },
+                {
+                    "in": "path",
+                    "name": "photoID",
+                    "schema": {
+                        "type": "integer"
+                    },
+                    "required": true,
+                    "description": "ID of a photo"
+                }
+            ],
+            "get": {
+                "operationId": "getPhoto",
+                "summary": "Retrieves the specified photo of the specified feature.",
+                "responses": {
+                    "200": {
+                        "description": "The requested photo. The Content-Type is the same as of the photo file stored on the server."
+                    },
+                    "400": {
+                        "description": "Either the feature ID or the photo ID path parameter was malformed.",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                },
+                                "examples": {
+                                    "malformed feature ID": {
+                                        "value": "malformed feature ID"
+                                    },
+                                    "malfomred photo ID": {
+                                        "value": "malfomred photo ID"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Photo does not exist (for the given feature)."
+                    }
+                }
+            }
+        },
+        "/data/proposals": {
+            "get": {
+                "operationId": "getProposals",
+                "summary": "Lists the proposals submitted to the system.",
+                "responses": {
+                    "200": {
+                        "description": "List of proposals submitted to the system.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Proposal"
+                                    },
+                                    "description": "List of proposals."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
