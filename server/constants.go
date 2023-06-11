@@ -20,5 +20,6 @@ const (
 	URITileserver        = URITileserverRoot + "/*x"
 	URITileTemplate      = URITileserverRoot + "/map/tiles/{z}/{x}/{y}.pbf"
 
-	AppName = "OKO"
+	AppName      = "OKO"
+	UserIDHeader = "X-User-ID"
 )

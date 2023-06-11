@@ -19,6 +19,14 @@ type User struct {
 	Name string `json:"name"`
 }
 
+type UserInfo struct {
+	User
+	AppVersion       *semver.Version `json:"app_version"`
+	LastSeenTime     *time.Time      `json:"last_seen_time"`
+	LastUploadTime   *time.Time      `json:"last_upload_time"`
+	LastDownloadTime *time.Time      `json:"last_download_time"`
+}
+
 type Feature struct {
 	// ID is an ID of the feature.
 	// When the feature is submitted by a client for creation (i.e. in Update.Create) it is considered a 'local' ID which must be unique across all submitted features.

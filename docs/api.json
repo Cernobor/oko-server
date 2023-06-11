@@ -125,6 +125,37 @@
                 "required": ["id", "name"],
                 "description": "A user in the system."
             },
+            "UserInfo": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "User ID."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "User name."
+                    },
+                    "app_version": {
+                        "type": "string",
+                        "description": "Version of the app last used by the user."
+                    },
+                    "last_seen_time": {
+                        "anyOf": [{"$ref": "#/components/schemas/LocalDateTime"}],
+                        "description": "Time of last contact (any) with the server."
+                    },
+                    "last_upload_time": {
+                        "anyOf": [{"$ref": "#/components/schemas/LocalDateTime"}],
+                        "description": "Time of last data upload."
+                    },
+                    "last_download_time": {
+                        "anyOf": [{"$ref": "#/components/schemas/LocalDateTime"}],
+                        "description": "Time of last data download."
+                    }
+                },
+                "required": ["id", "name", "app_version", "last_seen_time", "last_upload_time", "last_download_time"],
+                "description": "Extended info about a user."
+            },
             "Feature": {
                 "type": "object",
                 "properties": {
@@ -312,11 +343,22 @@
                 "required": ["version_hash", "build_time"],
                 "description": "Server build info."
             }
+        },
+        "parameters": {
+            "UserID": {
+                "in": "header",
+                "name": "X-User-ID",
+                "schema": {
+                    "type": "integer"
+                },
+                "required": false
+            }
         }
     },
     "security": [],
     "paths": {
         "/ping" : {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "ping",
                 "tags": ["app"],
@@ -342,6 +384,7 @@
             }
         },
         "/handshake": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "post": {
                 "operationId": "handshake",
                 "tags": ["app"],
@@ -384,6 +427,7 @@
             }
         },
         "/data": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getData",
                 "tags": ["app"],
@@ -500,6 +544,7 @@
             }
         },
         "/data/people": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getPeople",
                 "tags": ["app"],
@@ -523,6 +568,7 @@
             }
         },
         "/data/features": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getFeatures",
                 "tags": ["app"],
@@ -547,6 +593,7 @@
         },
         "/data/features/{featureID}/photos/{photoID}": {
             "parameters": [
+                {"$ref": "#/components/parameters/UserID"},
                 {
                     "in": "path",
                     "name": "featureID",
@@ -599,6 +646,7 @@
             }
         },
         "/data/proposals": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getProposals",
                 "tags": ["app"],
@@ -622,6 +670,7 @@
             }
         },
         "/mappack": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getTilePack",
                 "tags": ["app"],
@@ -634,6 +683,7 @@
             }
         },
         "/build-info": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getBuildInfo",
                 "tags": ["debug", "utils"],
@@ -653,6 +703,7 @@
             }
         },
         "/hard-fail": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "hardFail",
                 "tags": ["debug"],
@@ -665,6 +716,7 @@
             }
         },
         "/soft-fail": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "softFail",
                 "tags": ["debug"],
@@ -689,6 +741,7 @@
             }
         },
         "/app-versions": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "get": {
                 "operationId": "getAppVersions",
                 "tags": ["utils", "debug"],
@@ -736,6 +789,7 @@
         },
         "/app-versions/{version}": {
             "parameters": [
+                {"$ref": "#/components/parameters/UserID"},
                 {
                     "in": "path",
                     "name": "version",
@@ -786,6 +840,7 @@
             }
         },
         "/reinit": {
+            "parameters": [{"$ref": "#/components/parameters/UserID"}],
             "post": {
                 "operationId": "reinitDb",
                 "tags": ["debug", "utils"],
@@ -793,6 +848,28 @@
                 "responses": {
                     "204": {
                         "description": "DB has been reinitialized."
+                    }
+                }
+            }
+        },
+        "/usage-info": {
+            "get": {
+                "operationId": "getUsageInfo",
+                "tags": ["utils", "debug"],
+                "summary": "Similar to /data/people, but used app version and times of last contact, upload, and download are retreived as well.",
+                "responses": {
+                    "200": {
+                        "description": "User usage info.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/UserInfo"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

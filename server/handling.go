@@ -17,6 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mssola/user_agent"
 	"github.com/sirupsen/logrus"
+	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 func internalError(gc *gin.Context, err error) {
@@ -39,50 +41,104 @@ func (s *Server) setupRouter() *gin.Engine {
 	if err != nil {
 		hostname = "unknown"
 	}
-	router.Use(func(gc *gin.Context) {
-		path := gc.Request.URL.Path
-		start := time.Now()
-		gc.Next()
-		stop := time.Since(start)
-		latency := int(math.Ceil(float64(stop.Nanoseconds()) / 1_000_000.0))
-		statusCode := gc.Writer.Status()
-		clientIP := gc.ClientIP()
-		clientUserAgent := gc.Request.UserAgent()
-		referer := gc.Request.Referer()
-		dataLength := gc.Writer.Size()
-		if dataLength < 0 {
-			dataLength = 0
-		}
-		entry := s.log.WithFields(logrus.Fields{
-			"hostname":   hostname,
-			"statusCode": statusCode,
-			"latency":    latency,
-			"clientIP":   clientIP,
-			"method":     gc.Request.Method,
-			"path":       path,
-			"referer":    referer,
-			"dataLength": dataLength,
-			"userAgent":  clientUserAgent,
-		})
-
-		if len(gc.Errors) > 0 {
-			entry.Error(gc.Errors.ByType(gin.ErrorTypePrivate).String())
-		} else {
-			msg := fmt.Sprintf(
-				"%s - %s [%s] \"%s %s\" %d %d \"%s\" \"%s\" (%dms)",
-				clientIP, hostname, time.Now().Format(time.RFC3339), gc.Request.Method, path, statusCode, dataLength, referer, clientUserAgent, latency,
-			)
-			if statusCode >= 500 {
-				entry.Error(msg)
-			} else if statusCode >= 400 {
-				entry.Warn(msg)
-			} else if path == URIPing {
-				entry.Debug(msg)
-			} else {
-				entry.Info(msg)
+	router.Use(
+		func(gc *gin.Context) {
+			path := gc.Request.URL.Path
+			start := time.Now()
+			gc.Next()
+			stop := time.Since(start)
+			latency := int(math.Ceil(float64(stop.Nanoseconds()) / 1_000_000.0))
+			statusCode := gc.Writer.Status()
+			clientIP := gc.ClientIP()
+			clientUserAgent := gc.Request.UserAgent()
+			userId := gc.GetHeader(UserIDHeader)
+			referer := gc.Request.Referer()
+			dataLength := gc.Writer.Size()
+			if dataLength < 0 {
+				dataLength = 0
 			}
-		}
-	})
+			entry := s.log.WithFields(logrus.Fields{
+				"hostname":   hostname,
+				"statusCode": statusCode,
+				"latency":    latency,
+				"clientIP":   clientIP,
+				"method":     gc.Request.Method,
+				"path":       path,
+				"referer":    referer,
+				"dataLength": dataLength,
+				"userAgent":  clientUserAgent,
+				"userID":     userId,
+			})
+
+			if len(gc.Errors) > 0 {
+				entry.Error(gc.Errors.ByType(gin.ErrorTypePrivate).String())
+			} else {
+				msg := fmt.Sprintf(
+					"%s - %s [%s] \"%s %s\" %d %d \"%s\" \"%s\" (%dms)",
+					clientIP, hostname, time.Now().Format(time.RFC3339), gc.Request.Method, path, statusCode, dataLength, referer, clientUserAgent, latency,
+				)
+				if statusCode >= 500 {
+					entry.Error(msg)
+				} else if statusCode >= 400 {
+					entry.Warn(msg)
+				} else if path == URIPing {
+					entry.Debug(msg)
+				} else {
+					entry.Info(msg)
+				}
+			}
+		},
+		func(gc *gin.Context) {
+			if !s.dbAvailable.Load() {
+				gc.AbortWithError(http.StatusServiceUnavailable, fmt.Errorf("server database is not ready/available"))
+				gc.Header("Retry-After", "60")
+				return
+			}
+			gc.Next()
+		},
+		func(gc *gin.Context) {
+			userIdStr := gc.GetHeader(UserIDHeader)
+			userIdPresent := userIdStr != ""
+			var userId int64
+			var userIdErr error
+			if userIdPresent {
+				userId, userIdErr = strconv.ParseInt(userIdStr, 10, 0)
+			}
+			appVersion, appVersionErr := extractAppVersion(gc)
+			if userIdErr != nil {
+				gc.Error(fmt.Errorf("malformed %s: %w", UserIDHeader, userIdErr))
+			} else if userIdPresent {
+				gc.Set("uid", userId)
+				var err error
+				if appVersion == nil {
+					err = withDbConn(s, func(conn *sqlite.Conn) error {
+						err := sqlitex.Execute(conn, "update users set last_seen_time = ? where id = ?", &sqlitex.ExecOptions{
+							Args: []interface{}{time.Now().Unix(), userId},
+						})
+						return err
+					})
+				} else {
+					err = withDbConn(s, func(conn *sqlite.Conn) error {
+						err := sqlitex.Execute(conn, "update users set app_version = ?, last_seen_time = ? where id = ?", &sqlitex.ExecOptions{
+							Args: []interface{}{appVersion, time.Now().Unix(), userId},
+						})
+						return err
+					})
+				}
+				if err != nil {
+					gc.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to store user data into db: %w", err))
+				}
+			}
+			if appVersion != nil {
+				gc.Set("app-version", appVersion)
+			}
+			if appVersionErr != nil {
+				gc.Error(appVersionErr)
+				gc.Set("app-version-error", appVersionErr.Error())
+			}
+			gc.Next()
+		},
+	)
 
 	// tileserver
 	router.GET(URITileserver, gin.WrapH(s.tileserverSvSet.Handler()))
@@ -118,6 +174,7 @@ func (s *Server) setupRouter() *gin.Engine {
 	router.GET(URIAppVersion, s.handleGETAppVersion)
 	router.DELETE(URIAppVersion, s.handleDELETEAppVersion)
 	router.POST(URIReinit, s.handlePOSTReset)
+	router.GET(URIUsageInfo, s.handleGETUsageInfo)
 
 	return router
 }
@@ -137,9 +194,19 @@ func extractAppVersion(gc *gin.Context) (*semver.Version, error) {
 }
 
 func (s *Server) handleGETPing(gc *gin.Context) {
-	version, err := extractAppVersion(gc)
-	if err != nil {
-		badRequest(gc, err)
+	versionRaw, exists := gc.Get("app-version")
+	if !exists {
+		versionErr := gc.GetString("app-version-error")
+		if versionErr != "" {
+			badRequest(gc, fmt.Errorf("malformed app version: %v", &versionErr))
+		} else {
+			badRequest(gc, fmt.Errorf("app version not specified"))
+		}
+		return
+	}
+	version, ok := versionRaw.(*semver.Version)
+	if !ok {
+		internalError(gc, fmt.Errorf("malformed app version extracted"))
 		return
 	}
 
@@ -220,12 +287,12 @@ func (s *Server) handleDELETEAppVersion(gc *gin.Context) {
 }
 
 func (s *Server) handlePOSTReset(gc *gin.Context) {
-	err := s.initDB(true)
+	err := s.reinitDb()
 	if err != nil {
 		internalError(gc, err)
 		return
 	}
-	gc.Status(http.StatusOK)
+	gc.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleGETTilepack(gc *gin.Context) {
@@ -268,6 +335,8 @@ func (s *Server) handlePOSTHandshake(gc *gin.Context) {
 }
 
 func (s *Server) handleGETData(gc *gin.Context) {
+	uidRaw, uidExists := gc.Get("uid")
+	uid, _ := uidRaw.(int64)
 	accept := gc.GetHeader("Accept")
 	if accept == "application/json" {
 		data, err := s.getDataOnly()
@@ -276,7 +345,6 @@ func (s *Server) handleGETData(gc *gin.Context) {
 			return
 		}
 		gc.JSON(http.StatusOK, data)
-		return
 	} else if accept == "application/zip" {
 		file, err := s.getDataWithPhotos()
 		defer func() {
@@ -299,12 +367,25 @@ func (s *Server) handleGETData(gc *gin.Context) {
 			return
 		}
 		gc.DataFromReader(http.StatusOK, size, "application/zip", file, nil)
+	} else {
+		gc.String(http.StatusNotAcceptable, "%s is not acceptable", accept)
 		return
 	}
-	gc.String(http.StatusNotAcceptable, "%s is not acceptable", accept)
+	if uidExists {
+		err := withDbConn(s, func(conn *sqlite.Conn) error {
+			return sqlitex.Execute(conn, "update users set last_download_time = ? where id = ?", &sqlitex.ExecOptions{
+				Args: []interface{}{time.Now().Unix(), uid},
+			})
+		})
+		if err != nil {
+			gc.Error(fmt.Errorf("failed to store last download time: %w", err))
+		}
+	}
 }
 
 func (s *Server) handlePOSTData(gc *gin.Context) {
+	uidRaw, uidExists := gc.Get("uid")
+	uid, _ := uidRaw.(int64)
 	switch gc.ContentType() {
 	case "application/json":
 		s.handlePOSTDataJSON(gc)
@@ -312,6 +393,17 @@ func (s *Server) handlePOSTData(gc *gin.Context) {
 		s.handlePOSTDataMultipart(gc)
 	default:
 		badRequest(gc, fmt.Errorf("unsupported Content-Type"))
+		return
+	}
+	if uidExists {
+		err := withDbConn(s, func(conn *sqlite.Conn) error {
+			return sqlitex.Execute(conn, "update users set last_upload_time = ? where id = ?", &sqlitex.ExecOptions{
+				Args: []interface{}{time.Now().Unix(), uid},
+			})
+		})
+		if err != nil {
+			gc.Error(fmt.Errorf("failed to store last upload time: %w", err))
+		}
 	}
 }
 
@@ -469,4 +561,13 @@ func (s *Server) handleGETDataProposals(gc *gin.Context) {
 		return
 	}
 	gc.JSON(http.StatusOK, proposals)
+}
+
+func (s *Server) handleGETUsageInfo(gc *gin.Context) {
+	usage, err := s.getUsageInfo(nil)
+	if err != nil {
+		internalError(gc, err)
+		return
+	}
+	gc.JSON(http.StatusOK, usage)
 }

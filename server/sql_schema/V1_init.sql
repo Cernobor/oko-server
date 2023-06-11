@@ -8,7 +8,7 @@ CREATE TABLE features (
   id integer PRIMARY KEY AUTOINCREMENT,
   owner_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name text NOT NULL,
-  deadline text,
+  deadline integer,
   properties text NOT NULL,
   geom text NOT NULL
 );

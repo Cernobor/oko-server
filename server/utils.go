@@ -17,6 +17,14 @@ func ptr[T any](x T) *T {
 	return &x
 }
 
+func Map[T any, U any](f func(T) U, x []T) []U {
+	res := make([]U, len(x))
+	for i, e := range x {
+		res[i] = f(e)
+	}
+	return res
+}
+
 var contentTypes map[string]struct{} = map[string]struct{}{"image/jpeg": {}, "image/png": {}}
 
 func checkImageContentType(contentType string) bool {
