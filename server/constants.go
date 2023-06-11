@@ -8,6 +8,7 @@ const (
 	URIAppVersions       = "/app-versions"
 	URIAppVersion        = "/app-versions/:version"
 	URIReinit            = "/reinit"
+	URIUsageInfo         = "/usage-info"
 	URIMapPack           = "/mappack"
 	URIHandshake         = "/handshake"
 	URIData              = "/data"

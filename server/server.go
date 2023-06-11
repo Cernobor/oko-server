@@ -46,7 +46,6 @@ type ServerConfig struct {
 	Port          int
 	DbPath        string
 	TilepackPath  string
-	ReinitDB      bool
 	MinZoom       int
 	DefaultCenter models.Coords
 	MaxPhotoX     int

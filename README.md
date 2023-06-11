@@ -80,7 +80,6 @@ The table of options follows:
 | ``-tilepack <path>`` | **Required.** File that will be sent to clients when they request a tile pack, also used to serve tiles in online mode. |
 | ``-port <port>`` | Port where the server will listen. Default is ``8080``. |
 | ``-dbfile <path>`` | Path to the sqlite3 database file used for data storage. Will be created, if it does not exist upons startup. Default is ``./data.sqlite3``. |
-| ``-reinit-db`` | If specified, the DB will be reinitialized, i.e. the DB schema will be recreated, deleting all data. |
 | ``-min-zoom <int>`` | Minimum supported zoom. Clients will receive this value during handshake. Default is ``1``. |
 | ``-default-center-lat <float>`` | Latitude of the default map center, formatted as a floating point number of degrees. Clients will receive this value during handhake. Default is ``0``. |
 | ``-default-center-lng <float>`` | Longitude of the default map center, formatted as a floating point number of degrees. Clients will receive this value during handhake. Default is ``0``. |

@@ -296,6 +296,21 @@
                 "type": "string",
                 "format": "date-time",
                 "example": "2020-05-13T17:26:57.719+02:00"
+            },
+            "BuildInfo": {
+                "type": "object",
+                "properties": {
+                    "version_hash": {
+                        "type": "string",
+                        "description": "Commit ID (hash)."
+                    },
+                    "build_time": {
+                        "anyOf": [{"$ref": "#/components/schemas/LocalDateTime"}],
+                        "description": "Build time."
+                    }
+                },
+                "required": ["version_hash", "build_time"],
+                "description": "Server build info."
             }
         }
     },
@@ -304,6 +319,7 @@
         "/ping" : {
             "get": {
                 "operationId": "ping",
+                "tags": ["app"],
                 "summary": "Checks the server liveness and provides info about (newer) app versions.",
                 "responses": {
                     "200": {
@@ -328,6 +344,7 @@
         "/handshake": {
             "post": {
                 "operationId": "handshake",
+                "tags": ["app"],
                 "summary": "Performs pairing of the client with the server.",
                 "requestBody": {
                     "required": true,
@@ -369,6 +386,7 @@
         "/data": {
             "get": {
                 "operationId": "getData",
+                "tags": ["app"],
                 "summary": "Retrieves the data about users and features from the server.",
                 "responses": {
                     "200": {
@@ -395,6 +413,7 @@
             },
             "post": {
                 "operationId": "postData",
+                "tags": ["app"],
                 "summary": "Uploads new data to the server.",
                 "description": "The update process goes through these steps:\n\n  1. all created features (if any) are added to the system\n  2. new photos (if any) for both the new and existing features are saved\n  3. the features that should be updated (if any) are updated \n  4. the features to be deleted (if any) are deleted\n  5. the photos to be deleted (if any) are deleted\n  6. the proposals (if any) are saved\n\nThe whole upload process is atomic, i.e. it either succeedes or fails, and does not interfere with other users doing the same (this, or their requests may fail e.g. due to a deleted feature that is referenced in a request that is serialized after).",
                 "requestBody": {
@@ -483,6 +502,7 @@
         "/data/people": {
             "get": {
                 "operationId": "getPeople",
+                "tags": ["app"],
                 "summary": "Lists the users present in the system.",
                 "responses": {
                     "200": {
@@ -505,6 +525,7 @@
         "/data/features": {
             "get": {
                 "operationId": "getFeatures",
+                "tags": ["app"],
                 "summary": "Lists the features present in the system.",
                 "responses": {
                     "200": {
@@ -547,6 +568,7 @@
             ],
             "get": {
                 "operationId": "getPhoto",
+                "tags": ["app"],
                 "summary": "Retrieves the specified photo of the specified feature.",
                 "responses": {
                     "200": {
@@ -579,6 +601,7 @@
         "/data/proposals": {
             "get": {
                 "operationId": "getProposals",
+                "tags": ["app"],
                 "summary": "Lists the proposals submitted to the system.",
                 "responses": {
                     "200": {
@@ -594,6 +617,182 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/mappack": {
+            "get": {
+                "operationId": "getTilePack",
+                "tags": ["app"],
+                "summary": "Returns a file containing a pack of map tiles.",
+                "responses": {
+                    "200": {
+                        "description": "Tile pack file."
+                    }
+                }
+            }
+        },
+        "/build-info": {
+            "get": {
+                "operationId": "getBuildInfo",
+                "tags": ["debug", "utils"],
+                "summary": "Returns the info about the server build.",
+                "responses": {
+                    "200": {
+                        "description": "Server build info.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BuildInfo"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/hard-fail": {
+            "get": {
+                "operationId": "hardFail",
+                "tags": ["debug"],
+                "summary": "Debug endpoint for safe simulation of server-side error.",
+                "responses": {
+                    "501": {
+                        "description": "An error."
+                    }
+                }
+            }
+        },
+        "/soft-fail": {
+            "get": {
+                "operationId": "softFail",
+                "tags": ["debug"],
+                "summary": "Debug endpoint for safe simulation of an error reported through OK and json response body.",
+                "responses": {
+                    "200": {
+                        "description": "An error.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/app-versions": {
+            "get": {
+                "operationId": "getAppVersions",
+                "tags": ["utils", "debug"],
+                "summary": "Retrieves the known/registered app versions.",
+                "responses": {
+                    "200": {
+                        "description": "List of known/registered app versions.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/AppVersionInfo"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "postAppVersion",
+                "tags": ["utils"],
+                "summary": "Registers an app version.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AppVersionInfo"
+                            }
+                        }
+                    },
+                    "description": "App version info."
+                },
+                "responses": {
+                    "204": {
+                        "description": "Version has been registered."
+                    },
+                    "400": {
+                        "description": "Malformed version info."
+                    }
+                }
+            }
+        },
+        "/app-versions/{version}": {
+            "parameters": [
+                {
+                    "in": "path",
+                    "name": "version",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "get": {
+                "operationId": "getAppVersion",
+                "tags": ["app"],
+                "summary": "Retrieves an app version info.",
+                "responses": {
+                    "200": {
+                        "description": "App version info.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AppVersionInfo"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Version not specified."
+                    },
+                    "404": {
+                        "description": "Requested version not found."
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "deleteAppVersion",
+                "tags": ["utils"],
+                "summary": "Deletes an app version.",
+                "responses": {
+                    "204": {
+                        "description": "The specified version has been deleted."
+                    },
+                    "400": {
+                        "description": "Version not specified."
+                    },
+                    "404": {
+                        "description": "The specified version not found."
+                    }
+                }
+            }
+        },
+        "/reinit": {
+            "post": {
+                "operationId": "reinitDb",
+                "tags": ["debug", "utils"],
+                "summary": "Reinitializes DB (deletes all data).",
+                "responses": {
+                    "204": {
+                        "description": "DB has been reinitialized."
                     }
                 }
             }
