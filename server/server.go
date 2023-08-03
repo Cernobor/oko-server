@@ -293,10 +293,15 @@ func (s *Server) getData(conn *sqlite.Conn) (data models.Data, err error) {
 	if err != nil {
 		return models.Data{}, fmt.Errorf("failed to retreive features: %w", err)
 	}
+	proposals, err := s.getProposals(conn)
+	if err != nil {
+		return models.Data{}, fmt.Errorf("failed to retrieve proposals: %w", err)
+	}
 
 	return models.Data{
-		Users:    people,
-		Features: features,
+		Users:     people,
+		Features:  features,
+		Proposals: proposals,
 	}, nil
 }
 

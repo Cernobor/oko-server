@@ -91,6 +91,7 @@ type HandshakeResponse struct {
 type Data struct {
 	Users         []User                   `json:"users"`
 	Features      []Feature                `json:"features"`
+	Proposals     []Proposal               `json:"proposals"`
 	PhotoMetadata map[string]PhotoMetadata `json:"photo_metadata,omitempty"`
 }
 
